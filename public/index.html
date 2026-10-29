@@ -1,0 +1,728 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Дашборд ТКН</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f3f3f1;
+  --surface: #fcfcfb;
+  --line: #e4e3de;
+  --line-soft: #efeeea;
+  --text: #0b0b0b;
+  --text-2: #52514e;
+  --muted: #74736d;
+  --s1: #2a78d6;   /* дебиторка, выручка */
+  --s2: #eb6834;   /* кредиторка, поступления */
+  --s3: #1baf7a;   /* факт затрат */
+  --gray: #a8a79f;
+  --good: #0ca30c; --good-t: #006300;
+  --warn: #fab219; --warn-t: #8a5a00;
+  --crit: #d03b3b; --crit-t: #b02a2a;
+  --track: #e9eef6;
+  --shadow: 0 1px 2px rgba(0,0,0,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --bg: #121211; --surface: #1a1a19; --line: #302f2c; --line-soft: #262624;
+    --text: #f0efec; --text-2: #c3c2b7; --muted: #9a998f;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --gray: #6f6e66;
+    --good-t: #5fc45f; --warn-t: #f0b33a; --crit-t: #ff8080;
+    --track: #232b36; --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121211; --surface: #1a1a19; --line: #302f2c; --line-soft: #262624;
+  --text: #f0efec; --text-2: #c3c2b7; --muted: #9a998f;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --gray: #6f6e66;
+  --good-t: #5fc45f; --warn-t: #f0b33a; --crit-t: #ff8080;
+  --track: #232b36; --shadow: none;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+.wrap { max-width: 1280px; margin: 0 auto; padding: 0 16px 48px; }
+
+/* top bar */
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 18px 0 14px; }
+.brand { font-size: 18px; font-weight: 650; letter-spacing: -.01em; }
+.brand small { font-weight: 450; color: var(--muted); margin-left: 8px; font-size: 13px; }
+.spacer { flex: 1; }
+.fresh { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 99px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--text-2); font-size: 12px;
+}
+.chip i { width: 7px; height: 7px; border-radius: 50%; background: var(--good); display: inline-block; }
+.demo { background: color-mix(in srgb, var(--warn) 18%, transparent); border-color: transparent; color: var(--warn-t); font-weight: 600; }
+.icon-btn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 5px 10px; font-size: 13px; color: var(--text-2); }
+.icon-btn:hover { color: var(--text); }
+
+/* cards & grid */
+.grid { display: grid; gap: 14px; grid-template-columns: repeat(12, 1fr); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; box-shadow: var(--shadow); min-width: 0; }
+.span-12 { grid-column: span 12; } .span-8 { grid-column: span 8; } .span-7 { grid-column: span 7; }
+.span-6 { grid-column: span 6; } .span-5 { grid-column: span 5; } .span-4 { grid-column: span 4; } .span-3 { grid-column: span 3; }
+.card-h { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; }
+.card-h h2 { font-size: 15px; font-weight: 650; }
+.card-h .sub { color: var(--muted); font-size: 12.5px; }
+
+/* stat tiles */
+.tile .lab { display: flex; align-items: center; gap: 7px; color: var(--text-2); font-size: 13px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.tile .val { font-size: 28px; font-weight: 650; letter-spacing: -.02em; margin-top: 4px; }
+.tile .val small { font-size: 15px; font-weight: 500; color: var(--text-2); margin-left: 3px; }
+.tile .note { margin-top: 2px; color: var(--muted); font-size: 12.5px; }
+.up { color: var(--good-t); font-weight: 600; }
+.tone-warn { color: var(--warn-t); font-weight: 600; }
+
+/* segmented / tabs */
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; padding: 2px; background: var(--bg); }
+.seg button { padding: 4px 11px; border-radius: 7px; font-size: 13px; color: var(--text-2); white-space: nowrap; }
+.seg button[aria-pressed="true"], .seg button[aria-selected="true"] { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 0 0 1px var(--line); }
+.seg .n { margin-left: 5px; font-size: 12px; color: var(--muted); }
+.seg .n.alert { color: var(--crit-t); font-weight: 700; }
+
+/* task list */
+.tasks { list-style: none; }
+.task { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 10px 0; border-top: 1px solid var(--line-soft); }
+.task:first-child { border-top: 0; }
+.task .t { font-weight: 550; }
+.task .m { color: var(--muted); font-size: 12.5px; display: flex; flex-wrap: wrap; gap: 2px 10px; }
+.task .r { text-align: right; font-size: 12.5px; white-space: nowrap; align-self: center; }
+.kp-link { color: var(--s1); font-weight: 600; text-decoration: none; cursor: pointer; }
+.kp-link:hover { text-decoration: underline; }
+.badge { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 99px; white-space: nowrap; }
+.b-ok   { color: var(--good-t); background: color-mix(in srgb, var(--good) 14%, transparent); }
+.b-warn { color: var(--warn-t); background: color-mix(in srgb, var(--warn) 20%, transparent); }
+.b-crit { color: var(--crit-t); background: color-mix(in srgb, var(--crit) 14%, transparent); }
+.b-mute { color: var(--text-2); background: var(--line-soft); }
+
+/* bars (debts) */
+.bars { display: grid; gap: 8px; }
+.bar-row { display: grid; grid-template-columns: minmax(130px, 1.5fr) 1fr auto 22px; gap: 10px; align-items: center; font-size: 13px; }
+.bar-row .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-row .tr { height: 14px; }
+.bar-row .fill { height: 100%; border-radius: 0 4px 4px 0; transition: opacity .15s; }
+.bar-row:hover .fill { opacity: .8; }
+.bar-row .v { min-width: 62px; text-align: right; font-weight: 600; }
+.eye { width: 22px; height: 22px; padding: 0; display: inline-grid; place-items: center; border-radius: 4px; color: var(--muted); background: none; border: 0; cursor: pointer; }
+.eye svg { width: 16px; height: 16px; }
+.eye:hover, .eye:focus-visible { color: var(--text); background: var(--line-soft); }
+@media (hover: hover) { .bar-row .eye { opacity: 0; } .bar-row:hover .eye, .bar-row .eye:focus-visible { opacity: 1; } }
+.hidden-list { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12.5px; color: var(--muted); }
+.hidden-list .fchip { display: inline-flex; align-items: center; gap: 5px; }
+.hidden-list .link { background: none; border: 0; padding: 0; color: var(--text); text-decoration: underline; cursor: pointer; font: inherit; }
+.hidden-list .fchip svg { width: 14px; height: 14px; }
+
+/* filters row */
+.filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.fchip { border: 1px solid var(--line); border-radius: 99px; padding: 3px 11px; font-size: 13px; color: var(--text-2); background: var(--surface); }
+.fchip[aria-pressed="true"] { color: var(--text); border-color: var(--text-2); font-weight: 600; }
+
+/* table */
+.tbl-wrap { overflow-x: auto; margin: 0 -16px; padding: 0 16px; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+th { text-align: left; font-weight: 600; font-size: 12px; color: var(--muted); padding: 6px 10px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover { color: var(--text); }
+th.num, td.num { text-align: right; white-space: nowrap; }
+td { padding: 10px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+tbody tr { cursor: pointer; }
+tbody tr:hover td { background: color-mix(in srgb, var(--text) 3%, transparent); }
+tbody tr:focus-visible { outline: 2px solid var(--s1); outline-offset: -2px; }
+td .cl { font-weight: 600; }
+td .ob { color: var(--muted); font-size: 12.5px; }
+table.kp td { padding: 6px 10px; }
+table.kp th { padding: 4px 10px 6px; }
+table.kp .ell { max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pbar { display: flex; align-items: center; gap: 6px; min-width: 104px; font-size: 12px; color: var(--text-2); }
+.pbar .track { flex: 1; min-width: 56px; }
+.pbar b { min-width: 32px; text-align: right; font-weight: 400; }
+.kp-more { margin-top: 8px; }
+.pbar.cost { margin-top: 3px; }
+.pbar.cost .track > span { right: auto; border-radius: 0; }
+.pbar.cost .track { overflow: hidden; }
+.seg-sub { background: var(--s3) !important; }
+.seg-mat { background: var(--s2) !important; }
+.kp-more .fchip { cursor: pointer; }
+.mini { display: grid; gap: 4px; min-width: 120px; }
+.mini .row { display: grid; grid-template-columns: 1fr 34px; gap: 6px; align-items: center; font-size: 12px; color: var(--text-2); }
+.track { height: 6px; border-radius: 3px; background: var(--track); position: relative; }
+.track > span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--s1); }
+.cost { min-width: 150px; }
+.cost .track { height: 8px; overflow: visible; }
+.cost .tick { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text-2); border-radius: 1px; opacity: .6; }
+.cost .txt { font-size: 12px; color: var(--text-2); margin-top: 4px; display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: center; }
+.st-ok > span { background: var(--s3); } .st-warn > span { background: var(--warn); } .st-crit > span { background: var(--crit); }
+
+/* contracts list */
+.ctr { list-style: none; }
+.ctr li { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 10px 0; border-top: 1px solid var(--line-soft); }
+.ctr li:first-child { border-top: 0; }
+.ctr .a { font-weight: 550; }
+.ctr .b { color: var(--muted); font-size: 12.5px; }
+.ctr .c { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; font-size: 12px; color: var(--text-2); margin-top: 4px; }
+
+/* chart */
+.chart { position: relative; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--text-2); margin-bottom: 6px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 16px; height: 0; border-top: 2px solid; display: inline-block; }
+.legend i.dash { border-top-style: dashed; }
+.tip {
+  position: absolute; pointer-events: none; z-index: 5; min-width: 160px; padding: 8px 10px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 9px; font-size: 12.5px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.14); display: none;
+}
+.tip .h { color: var(--muted); margin-bottom: 4px; }
+.tip .r { display: flex; align-items: center; gap: 7px; justify-content: space-between; }
+.tip .r b { font-weight: 650; }
+.tip .k { display: inline-flex; align-items: center; gap: 7px; color: var(--text-2); }
+.tip .k i { width: 12px; border-top: 2px solid; display: inline-block; }
+.dtbl { max-height: 320px; overflow: auto; }
+
+/* drawer */
+.scrim { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: none; z-index: 20; }
+.scrim.open { display: block; }
+.drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100%); background: var(--surface);
+  border-left: 1px solid var(--line); z-index: 21; overflow-y: auto; padding: 18px 18px 40px;
+  transform: translateX(100%); transition: transform .2s ease;
+}
+.drawer.open { transform: none; }
+.dh { display: flex; gap: 12px; align-items: flex-start; }
+.dh h3 { font-size: 18px; font-weight: 650; }
+.dh .sub { color: var(--muted); font-size: 13px; }
+.close { margin-left: auto; border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; color: var(--text-2); }
+.sec { margin-top: 18px; }
+.sec h4 { font-size: 13px; font-weight: 650; margin-bottom: 8px; }
+.kv { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.kv > div { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.kv .l { color: var(--muted); font-size: 12px; }
+.kv .v { font-size: 17px; font-weight: 650; }
+.kv .s { font-size: 12px; color: var(--text-2); }
+.docs { list-style: none; font-size: 13px; }
+.docs li { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-top: 1px solid var(--line-soft); }
+.docs li:first-child { border-top: 0; }
+.docs .src { color: var(--muted); font-size: 12px; }
+
+.foot { margin-top: 18px; color: var(--muted); font-size: 12.5px; }
+
+@media (max-width: 960px) {
+  .span-8, .span-7, .span-6, .span-5, .span-4 { grid-column: span 12; }
+  .span-3 { grid-column: span 6; }
+}
+@media (max-width: 720px) {
+  .tile .val { font-size: 24px; }
+  .kv { grid-template-columns: 1fr; }
+  .bar-row { grid-template-columns: 1fr auto; }
+  .bar-row .tr { grid-column: 1 / -1; order: 3; }
+  /* таблица КП превращается в карточки */
+  .tbl-wrap { overflow: visible; margin: 0; padding: 0; }
+  table.kp, table.kp thead, table.kp tbody, table.kp tr, table.kp td { display: block; width: auto; }
+  table.kp thead { display: none; }
+  table.kp tr { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin-bottom: 10px; }
+  table.kp td { border: 0; padding: 5px 0; display: grid; grid-template-columns: 96px 1fr; gap: 8px; align-items: start; text-align: left !important; }
+  table.kp td::before { content: attr(data-l); color: var(--muted); font-size: 12px; padding-top: 2px; }
+  table.kp td.num > div { text-align: left; }
+  table.kp td.first { grid-template-columns: 1fr; }
+  table.kp td.first::before { display: none; }
+  tbody tr:hover td { background: none; }
+}
+@media (prefers-reduced-motion: reduce) { .drawer { transition: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">ТКН-Управление<small>Дашборд</small></div>
+    <span class="chip demo" title="Плитки, долги, выручка и договоры — из 1С. Задачи и таблица КП пока демо.">Pyrus и КП — демо</span>
+    <div class="spacer"></div>
+    <div class="fresh" aria-label="Свежесть данных">
+      <span class="chip"><i></i><span id="fresh1c">1С · загрузка…</span></span>
+    </div>
+    <button class="icon-btn" id="themeBtn" aria-label="Переключить тему">Тема</button>
+  </header>
+
+  <main class="grid">
+
+    <!-- плитки -->
+    <section class="card tile span-3"><div class="lab"><span class="dot" style="background:var(--s1)"></span>Выручка с начала года</div><div class="val" id="t-rev"></div><div class="note" id="t-rev-n"></div></section>
+    <section class="card tile span-3"><div class="lab"><span class="dot" style="background:var(--s1)"></span>Дебиторка</div><div class="val" id="t-ar"></div><div class="note" id="t-ar-n"></div></section>
+    <section class="card tile span-3"><div class="lab"><span class="dot" style="background:var(--s2)"></span>Кредиторка</div><div class="val" id="t-ap"></div><div class="note" id="t-ap-n"></div></section>
+    <section class="card tile span-3"><div class="lab">КП в работе</div><div class="val" id="t-ct"></div><div class="note" id="t-ct-n"></div></section>
+
+    <!-- задачи -->
+    <section class="card span-7" aria-labelledby="h-tasks">
+      <div class="card-h">
+        <h2 id="h-tasks">Задачи Pyrus</h2>
+        <div class="seg" role="tablist" id="taskTabs"></div>
+      </div>
+      <ul class="tasks" id="taskList"></ul>
+    </section>
+
+    <!-- долги -->
+    <section class="card span-5" aria-labelledby="h-debt">
+      <div class="card-h">
+        <h2 id="h-debt">Долги по контрагентам</h2>
+        <div class="spacer"></div>
+        <div class="seg" id="debtSeg">
+          <button data-k="ar" aria-pressed="true">Нам должны</button>
+          <button data-k="ap" aria-pressed="false">Мы должны</button>
+        </div>
+      </div>
+      <div class="bars" id="debtBars"></div>
+    </section>
+
+    <!-- КП в работе -->
+    <section class="card span-12" aria-labelledby="h-kp">
+      <div class="card-h">
+        <h2 id="h-kp">КП в работе</h2>
+        <span class="sub" id="kpSub"></span>
+        <div class="spacer"></div>
+        <div class="filters" id="kpFilters">
+          <button class="fchip" data-f="all" aria-pressed="true">Все</button>
+          <button class="fchip" data-f="debt" aria-pressed="false">Выполнено, но не оплачено</button>
+        </div>
+      </div>
+      <div class="legend kp-legend"><span><i style="border-top-color:var(--s1)"></i>Оплачено клиентом</span><span><i style="border-top-color:var(--s3)"></i>Подрядчикам оплачено</span><span><i style="border-top-color:var(--s2)"></i>Материалов привезено</span><span class="ob">доли от суммы заказов</span></div>
+      <div class="tbl-wrap">
+        <table class="kp">
+          <thead><tr>
+            <th class="sortable" data-s="id">КП</th>
+            <th>Клиент</th>
+            <th>Объект</th>
+            <th class="sortable num" data-s="sum">Сумма, с НДС</th>
+            <th class="sortable" data-s="done">Выполнено</th>
+            <th class="sortable" data-s="paid">Оплачено</th>
+          </tr></thead>
+          <tbody id="kpBody"></tbody>
+        </table>
+      </div>
+      <div class="kp-more"><button class="fchip" id="kpMore" hidden></button></div>
+    </section>
+
+    <!-- выручка -->
+    <section class="card span-7" aria-labelledby="h-rev">
+      <div class="card-h">
+        <h2 id="h-rev">Выручка и поступления</h2>
+        <div class="spacer"></div>
+        <div class="seg" id="revMode">
+          <button data-m="month" aria-pressed="true">По месяцам</button>
+          <button data-m="cum" aria-pressed="false">Нарастающим</button>
+        </div>
+        <div class="seg" id="revView">
+          <button data-v="chart" aria-pressed="true">График</button>
+          <button data-v="table" aria-pressed="false">Таблица</button>
+        </div>
+      </div>
+      <div class="legend" id="revLegend"></div>
+      <div class="chart" id="revChart"></div>
+      <div class="foot" id="revFoot"></div>
+    </section>
+
+    <!-- договоры -->
+    <section class="card span-5" aria-labelledby="h-ctr">
+      <div class="card-h"><h2 id="h-ctr">Договоры</h2><span class="sub">ближайшие по сроку</span></div>
+      <ul class="ctr" id="ctrList"></ul>
+    </section>
+
+  </main>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="dTitle" tabindex="-1"></aside>
+
+<script>
+/* ===== демо-данные (вымышленные) ===================================== */
+/* Данные 1С приходят с /api/data и заполняют эти переменные (см. applyOnec). */
+let TODAY = new Date();
+const MONTHS = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+let REV26 = [], CASH26 = [], REV25 = [], AR = [], AP = [], AR_N = 0, AP_N = 0;
+let CONTRACTS = [], CONTRACTS_ACTIVE = 0, YEAR = TODAY.getFullYear();
+const TOP_DEBTS = 15;
+/* Убранные контрагенты не попадают ни в график, ни в сумму и счётчик на плитках. Хранятся в браузере. */
+const RAW_DEBT = {ar: [], ap: []};
+const HIDDEN = {ar: new Set(), ap: new Set()};
+try { const h = JSON.parse(localStorage.getItem('tkn-debt-hidden') || '{}'); for (const k of ['ar','ap']) HIDDEN[k] = new Set(h[k] || []); } catch(e) {}
+function saveHidden() { try { localStorage.setItem('tkn-debt-hidden', JSON.stringify({ar:[...HIDDEN.ar], ap:[...HIDDEN.ap]})); } catch(e) {} }
+function rebuildDebt() {
+  const ar = RAW_DEBT.ar.filter(r => !HIDDEN.ar.has(r.name)), ap = RAW_DEBT.ap.filter(r => !HIDDEN.ap.has(r.name));
+  AR = topWithRest(ar); AP = topWithRest(ap); AR_N = ar.length; AP_N = ap.length;
+}
+const SVG = body => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+body+'</svg>';
+const EYE_OFF = SVG('<path d="M10.7 5.1A10.4 10.4 0 0 1 12 5c6 0 10 7 10 7a17 17 0 0 1-3.2 3.9M6.6 6.6A17 17 0 0 0 2 12s4 7 10 7a10 10 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M3 3l18 18"/>');
+const EYE_ON = SVG('<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>');
+function topWithRest(list) {
+  const head = list.slice(0, TOP_DEBTS).map(r => [r.name, r.sum]);
+  const rest = list.slice(TOP_DEBTS);
+  if (rest.length) head.push(['Прочие ('+rest.length+')', rest.reduce((a,r)=>a+r.sum,0)]);
+  return head;
+}
+
+let KP = [];
+
+const TASKS = [
+ {t:'Согласовать акт выполненных работ (этап 2)', kp:'1217', who:'Вы', own:'me', due:0, idle:1},
+ {t:'Подписать допсоглашение № 2', kp:'1204', who:'Вы', own:'me', due:-2, idle:2},
+ {t:'Утвердить счёт «Вент-Снаб» на воздуховоды', kp:'1217', who:'Вы', own:'me', due:1, idle:0},
+ {t:'Решение по аналогу чиллера', kp:'1209', who:'Вы', own:'me', due:3, idle:0},
+ {t:'Проверить смету допработ', kp:'1238', who:'Вы', own:'me', due:2, idle:1},
+ {t:'Согласовать график ТО на ноябрь', kp:'1231', who:'Вы', own:'me', due:5, idle:0},
+ {t:'Получить документы на шкафы управления', kp:'1204', who:'Петров С.', own:'staff', due:-4, idle:6},
+ {t:'Запросить счёт на дымоудаление', kp:'1204', who:'Смирнова Е.', own:'staff', due:-1, idle:3},
+ {t:'Передать исполнительную документацию', kp:'1189', who:'Кузнецов Д.', own:'staff', due:-3, idle:5},
+ {t:'Пусконаладка приточной установки', kp:'1238', who:'Орлов П.', own:'staff', due:10, idle:4},
+ {t:'Сверка актов с заказчиком', kp:'1225', who:'Васильева Н.', own:'staff', due:2, idle:3},
+ {t:'Монтаж воздуховодов, секция 2', kp:'1217', who:'Иванов А.', own:'staff', due:4, idle:1},
+ {t:'Заявка на материалы, цех 3', kp:'1238', who:'Смирнова Е.', own:'staff', due:6, idle:0},
+ {t:'Закупка частотных преобразователей', kp:'1225', who:'Смирнова Е.', own:'staff', due:8, idle:1},
+ {t:'Выезд на объект: диагностика СВИК', kp:'1242', who:'Орлов П.', own:'staff', due:3, idle:0},
+ {t:'Монтаж блоков ТО, подвал', kp:'1231', who:'Иванов А.', own:'staff', due:7, idle:2},
+];
+
+/* ===== вспомогательное ================================================= */
+const $ = s => document.querySelector(s);
+const sum = a => a.reduce((x,y)=>x+y,0);
+const nf = (v,d=2) => v.toLocaleString('ru-RU',{maximumFractionDigits:d});
+const mln = v => nf(v/1e6) + ' млн ₽';
+const mlnOrK = v => Math.abs(v) < 1e6 ? nf(v/1e3,0) + ' тыс.' : nf(v/1e6) + ' млн';
+const rub = v => nf(v,0) + ' ₽';
+const pct = v => Math.round(v*100) + '%';
+const dayDiff = iso => Math.round((new Date(iso) - TODAY)/864e5);
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+function plural(n, one, few, many) { const m=n%100, d=n%10; if(m>10&&m<20) return many; if(d===1) return one; if(d>1&&d<5) return few; return many; }
+
+/* ===== плитки ========================================================== */
+function renderTiles(){
+  const done = REV26.length - 1;   // полных месяцев; текущий неполный
+  const ytd = sum(REV26), prev = sum(REV25.slice(0,done)), cur = sum(REV26.slice(0,done));
+  $('#t-rev').textContent = mln(ytd*1e6);
+  if (done > 0 && prev > 0) {
+    const d = (cur/prev-1)*100;
+    $('#t-rev-n').innerHTML = '<span class="'+(d>=0?'up':'tone-warn')+'">'+(d>=0?'▲ +':'▼ ')+nf(d,1)+'%</span> '+MONTHS[0]+'–'+MONTHS[done-1]+' к '+(YEAR-1);
+  } else $('#t-rev-n').textContent = 'без НДС, по счёту 90.01';
+  const ar = sum(AR.map(r=>r[1])), ap = sum(AP.map(r=>r[1]));
+  $('#t-ar').textContent = mln(ar); $('#t-ar-n').textContent = AR_N+' '+plural(AR_N,'контрагент','контрагента','контрагентов');
+  $('#t-ap').textContent = mln(ap); $('#t-ap-n').textContent = AP_N+' '+plural(AP_N,'поставщик','поставщика','поставщиков');
+  const left = sum(KP.map(k => k.sum - k.done));
+  $('#t-ct').innerHTML = KP.length + '<small>' + plural(KP.length,'КП','КП','КП') + '</small>';
+  $('#t-ct-n').textContent = 'заказы ' + mln(sum(KP.map(k => k.sum))) + ' · осталось выполнить ' + mln(left);
+}
+
+/* ===== задачи ========================================================== */
+const taskTabs = [
+  {k:'me',   label:'Мне',        f:t=>t.own==='me'},
+  {k:'over', label:'Просрочено', f:t=>t.due<0, alert:true},
+  {k:'idle', label:'Зависли',    f:t=>t.own==='staff' && t.idle>=3},
+];
+let taskTab = 'me';
+function renderTasks() {
+  const box = $('#taskTabs'); box.textContent = '';
+  taskTabs.forEach(tb => {
+    const n = TASKS.filter(tb.f).length;
+    const b = el('button','',tb.label); b.setAttribute('role','tab'); b.setAttribute('aria-selected', tb.k===taskTab);
+    const c = el('span','n'+(tb.alert&&n?' alert':''), n); b.append(c);
+    b.onclick = () => { taskTab = tb.k; renderTasks(); };
+    box.append(b);
+  });
+  const list = $('#taskList'); list.textContent = '';
+  const tab = taskTabs.find(x=>x.k===taskTab);
+  const rows = TASKS.filter(tab.f).sort((a,b)=> taskTab==='idle' ? b.idle-a.idle : a.due-b.due);
+  rows.forEach(t => {
+    const li = el('li','task');
+    li.append(el('div','t',t.t));
+    const r = el('div','r');
+    if (t.due < 0) r.append(el('span','badge b-crit','✕ просрочено '+(-t.due)+' дн.'));
+    else if (taskTab==='idle') r.append(el('span','badge b-warn','▲ без движения '+t.idle+' дн.'));
+    else r.append(el('span','badge b-mute', t.due===0 ? 'срок сегодня' : 'через '+t.due+' дн.'));
+    li.append(r);
+    const m = el('div','m');
+    const kp = el('a','kp-link','КП '+t.kp); kp.onclick = () => openKp(t.kp); kp.tabIndex = 0; kp.onkeydown = e => { if(e.key==='Enter') openKp(t.kp); };
+    m.append(kp, el('span','',t.who));
+    if (taskTab==='idle' && t.due<0) m.append(el('span','', 'и срок вышел'));
+    li.append(m);
+    list.append(li);
+  });
+  if (!rows.length) list.append(el('li','task','Здесь пусто — всё в порядке.'));
+}
+
+/* ===== долги =========================================================== */
+let debtKey = 'ar', hiddenOpen = false;
+function renderDebt() {
+  const rows = debtKey==='ar' ? AR : AP, color = debtKey==='ar' ? 'var(--s1)' : 'var(--s2)';
+  const max = Math.max(1, ...rows.map(r=>r[1]));
+  const box = $('#debtBars'); box.textContent = '';
+  rows.forEach(([name,v],i) => {
+    const last = name.startsWith('Прочие');
+    const row = el('div','bar-row'); row.title = name+': '+rub(v);
+    row.append(el('div','nm',name));
+    const tr = el('div','tr'); const f = el('div','fill'); f.style.width = (v/max*100)+'%';
+    f.style.background = last ? 'var(--gray)' : color; tr.append(f);
+    row.append(tr, el('div','v',mlnOrK(v)));
+    if (last) row.append(el('span'));
+    else {
+      const b = el('button','eye'); b.type = 'button'; b.innerHTML = EYE_OFF;
+      b.title = 'Убрать из списка и расчётов'; b.setAttribute('aria-label','Убрать '+name);
+      b.onclick = () => { HIDDEN[debtKey].add(name); saveHidden(); rebuildDebt(); renderTiles(); renderDebt(); };
+      row.append(b);
+    }
+    box.append(row);
+  });
+  const hid = RAW_DEBT[debtKey].filter(r => HIDDEN[debtKey].has(r.name));
+  if (hid.length) {
+    const hl = el('div','hidden-list'); hl.append(el('span','','Убраны ('+hid.length+'):'));
+    const tg = el('button','link', hiddenOpen ? 'Свернуть' : 'См. список'); tg.type = 'button'; tg.setAttribute('aria-expanded', hiddenOpen);
+    tg.onclick = () => { hiddenOpen = !hiddenOpen; renderDebt(); };
+    hl.append(tg);
+    if (hiddenOpen) hid.forEach(r => {
+      const b = el('button','fchip'); b.type = 'button'; b.title = 'Вернуть в список: '+rub(r.sum);
+      b.innerHTML = EYE_ON; b.append(r.name+' · '+mlnOrK(r.sum));
+      b.onclick = () => { HIDDEN[debtKey].delete(r.name); saveHidden(); rebuildDebt(); renderTiles(); renderDebt(); };
+      hl.append(b);
+    });
+    box.append(hl);
+  }
+  const note = el('div','foot','Сальдо по счетам 62 и 60 на конец сегодняшнего дня, млн ₽. Авансы и переплаты не учитываются.');
+  box.append(note);
+  document.querySelectorAll('#debtSeg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.k===debtKey));
+}
+$('#debtSeg').onclick = e => { const b = e.target.closest('button'); if(b){ debtKey = b.dataset.k; renderDebt(); } };
+
+/* ===== таблица КП ====================================================== */
+let kpFilter = 'all', kpSort = {k:'sum', dir:-1}, kpAll = false;
+const KP_SHOWN = 6;
+function renderKp() {
+  const f = {all: k=>true, debt: k=>k.done>k.paid}[kpFilter];
+  const rows = KP.filter(f).sort((a,b) => {
+    const k = kpSort.k; const x = a[k], y = b[k];
+    return (x<y?-1:x>y?1:0) * kpSort.dir;
+  });
+  $('#kpSub').textContent = rows.length+' '+plural(rows.length,'КП','КП','КП')+' · заказы '+mln(sum(rows.map(r=>r.sum)));
+  document.querySelectorAll('#kpFilters button').forEach(b => b.setAttribute('aria-pressed', b.dataset.f===kpFilter));
+  const body = $('#kpBody'); body.textContent = '';
+  const shown = kpAll ? rows : rows.slice(0, KP_SHOWN);
+  shown.forEach(k => {
+    const tr = el('tr'); tr.tabIndex = 0;
+    tr.onclick = () => openKp(k.id); tr.onkeydown = e => { if(e.key==='Enter') openKp(k.id); };
+    const td = (cls, label) => { const c = el('td', cls||''); c.dataset.l = label; tr.append(c); return c; };
+    const a = td('', 'КП'); a.append(el('span','cl','КП '+k.id)); a.firstChild.style.color = 'var(--s1)'; a.style.whiteSpace = 'nowrap';
+    const cl = td('ell','Клиент'); cl.textContent = k.client; cl.title = k.client;
+    const ob = td('ell','Объект'); ob.textContent = k.obj; ob.title = k.obj;
+    const c = td('num','Сумма'); c.textContent = mlnOrK(k.sum); c.title = rub(k.sum);
+    [['Выполнено',k.done],['Оплачено',k.paid]].forEach(([l,v]) => {
+      const d = td('', l); const w = el('div','pbar'); const t = el('div','track'); const sp = el('span'); sp.style.width = Math.min(v/k.sum,1)*100+'%'; t.append(sp);
+      t.title = l+': '+rub(v); w.append(t, el('b','',pct(v/k.sum))); d.append(w);
+      if (l === 'Оплачено') {
+        const cw = el('div','pbar cost'), ct = el('div','track');
+        const sw = Math.min(k.sub/k.sum,1)*100, mw = Math.min(k.mat/k.sum, Math.max(1-k.sub/k.sum,0))*100;
+        const a = el('span','seg-sub'); a.style.width = sw+'%'; const b = el('span','seg-mat'); b.style.left = sw+'%'; b.style.width = mw+'%';
+        ct.append(a, b); ct.title = 'Подрядчикам оплачено: '+rub(k.sub)+' · Материалов привезено: '+rub(k.mat);
+        const tot = (k.sub+k.mat)/k.sum, tb = el('b','',pct(tot)); if (tot > 1) tb.style.color = 'var(--s2)';
+        cw.append(ct, tb); d.append(cw);
+      }
+    });
+    body.append(tr);
+  });
+  if (!rows.length) { const tr = el('tr'); const c = el('td','', KP.length ? 'Нет КП под этот фильтр.' : 'Нет КП в работе.'); c.colSpan = 6; tr.append(c); body.append(tr); }
+  const more = $('#kpMore'); more.hidden = rows.length <= KP_SHOWN;
+  more.textContent = kpAll ? 'Свернуть' : 'Показать все '+rows.length;
+}
+$('#kpMore').onclick = () => { kpAll = !kpAll; renderKp(); };
+$('#kpFilters').onclick = e => { const b = e.target.closest('button'); if(b){ kpFilter = b.dataset.f; renderKp(); } };
+document.querySelectorAll('th.sortable').forEach(th => th.onclick = () => {
+  const k = th.dataset.s; kpSort = {k, dir: kpSort.k===k ? -kpSort.dir : -1}; renderKp();
+});
+
+/* ===== договоры ======================================================== */
+function renderContracts(){
+  const box = $('#ctrList'); box.textContent = '';
+  const near = CONTRACTS.filter(c => c.end && dayDiff(c.end) >= 0).sort((a,b)=>a.end<b.end?-1:1).slice(0,6);
+  near.forEach(c => {
+    const li = el('li'); const dd = dayDiff(c.end);
+    li.append(el('div','a','№ '+c.n+' · '+c.client));
+    const right = el('div','');
+    right.append(dd<=30 ? el('span','badge b-warn','▲ '+dd+' дн.') : el('span','badge b-mute','до '+new Date(c.end).toLocaleDateString('ru-RU',{day:'numeric',month:'short',year:'numeric'})));
+    li.append(right);
+    li.append(el('div','b','от '+new Date(c.date).toLocaleDateString('ru-RU')+(c.sum ? ' · сумма '+mln(c.sum) : '')));
+    box.append(li);
+  });
+  if (!near.length) box.append(el('li','','Договоров с ближайшим сроком окончания нет.'));
+}
+
+/* ===== линейный график ================================================== */
+function lineChart(host, o) {
+  /* o: {labels, series:[{label,color,dash,values,end}], fmt, unit} */
+  host.textContent = '';
+  const W = Math.max(host.clientWidth, 280), H = W < 520 ? 250 : 290;
+  const m = {l: 40, r: W < 520 ? 12 : 54, t: 10, b: 24};
+  const iw = W-m.l-m.r, ih = H-m.t-m.b, n = o.labels.length;
+  const all = o.series.flatMap(s => s.values.filter(v=>v!=null));
+  const step = niceStep(Math.max(...all)/4), max = Math.ceil(Math.max(...all)/step)*step;
+  const x = i => m.l + iw*(i/(n-1)), y = v => m.t + ih*(1-v/max);
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS,'svg'); svg.setAttribute('viewBox',`0 0 ${W} ${H}`); svg.setAttribute('role','img');
+  svg.setAttribute('aria-label', o.aria || 'График');
+  const add = (p, tag, attrs, text) => { const e = document.createElementNS(NS,tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text!=null) e.textContent = text; p.append(e); return e; };
+  for (let v=0; v<=max+1e-9; v+=step) {
+    add(svg,'line',{x1:m.l,x2:W-m.r,y1:y(v),y2:y(v),stroke:'var(--line)','stroke-width':1});
+    add(svg,'text',{x:m.l-8,y:y(v)+4,'text-anchor':'end','font-size':11,fill:'var(--muted)'}, nf(v,1));
+  }
+  const every = W < 520 ? 2 : 1;
+  o.labels.forEach((l,i) => { if (i%every===0) add(svg,'text',{x:x(i),y:H-6,'text-anchor':'middle','font-size':11,fill:'var(--muted)'}, l); });
+  o.series.forEach(s => {
+    let d = ''; s.values.forEach((v,i) => { if (v!=null) d += (d?'L':'M') + x(i).toFixed(1)+' '+y(v).toFixed(1); });
+    const p = add(svg,'path',{d,fill:'none',stroke:s.color,'stroke-width':2,'stroke-linejoin':'round','stroke-linecap':'round'});
+    if (s.dash) p.setAttribute('stroke-dasharray','5 4');
+    if (s.end) {
+      const li = s.values.map(v=>v!=null).lastIndexOf(true), v = s.values[li];
+      add(svg,'circle',{cx:x(li),cy:y(v),r:4.5,fill:s.color,stroke:'var(--surface)','stroke-width':2});
+      if (W >= 520) add(svg,'text',{x:x(li)+9,y:y(v)+4,'font-size':12,'font-weight':600,fill:'var(--text)'}, nf(v,1));
+    }
+  });
+  const cross = add(svg,'line',{y1:m.t,y2:m.t+ih,stroke:'var(--text-2)','stroke-width':1,opacity:0});
+  const dots = o.series.map(s => add(svg,'circle',{r:4.5,fill:s.color,stroke:'var(--surface)','stroke-width':2,opacity:0}));
+  const hit = add(svg,'rect',{x:m.l,y:m.t,width:iw,height:ih,fill:'transparent',tabindex:0});
+  host.append(svg);
+  const tip = el('div','tip'); host.append(tip);
+  function show(i) {
+    cross.setAttribute('x1',x(i)); cross.setAttribute('x2',x(i)); cross.setAttribute('opacity',.45);
+    tip.textContent = ''; tip.append(el('div','h', o.tipHead(i)));
+    o.series.forEach((s,j) => {
+      const v = s.values[i]; if (v==null) { dots[j].setAttribute('opacity',0); return; }
+      dots[j].setAttribute('cx',x(i)); dots[j].setAttribute('cy',y(v)); dots[j].setAttribute('opacity',1);
+      const r = el('div','r'); const k = el('span','k'); const ln = el('i'); ln.style.borderTopColor = s.color; if (s.dash) ln.style.borderTopStyle = 'dashed';
+      k.append(ln, document.createTextNode(s.label)); r.append(k, el('b','',o.fmt(v))); tip.append(r);
+    });
+    tip.style.display = 'block';
+    const tw = tip.offsetWidth, px = x(i) * (host.clientWidth / W);
+    tip.style.left = Math.max(0, Math.min(px + 14, host.clientWidth - tw)) + 'px'; tip.style.top = '8px';
+  }
+  function hide() { cross.setAttribute('opacity',0); dots.forEach(d=>d.setAttribute('opacity',0)); tip.style.display='none'; }
+  const idx = ev => { const r = svg.getBoundingClientRect(); const px = (ev.clientX - r.left) * (W / r.width); return Math.max(0, Math.min(n-1, Math.round((px-m.l)/iw*(n-1)))); };
+  hit.addEventListener('pointermove', ev => show(idx(ev)));
+  hit.addEventListener('pointerleave', hide);
+  hit.addEventListener('keydown', ev => { if (ev.key==='ArrowRight' || ev.key==='ArrowLeft') { hit._i = Math.max(0, Math.min(n-1, (hit._i ?? n-1) + (ev.key==='ArrowRight'?1:-1))); show(hit._i); ev.preventDefault(); } });
+  hit.addEventListener('blur', hide);
+}
+function niceStep(raw) { const p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw/p; return (f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10)*p; }
+const cum = a => { let s=0; return a.map(v => v==null ? null : (s+=v)); };
+
+/* ===== выручка ========================================================== */
+let revMode = 'month', revView = 'chart';
+function renderRev() {
+  if (!REV26.length) return;
+  const cur = REV26.length - 1;
+  $('#revFoot').textContent = 'Выручка — по проводкам счёта 90.01 (без НДС), поступления — деньги от клиентов по банку и кассе (с НДС), млн ₽. '+MONTHS[cur][0].toUpperCase()+MONTHS[cur].slice(1)+' — неполный месяц.';
+  const host = $('#revChart');
+  const m = revMode==='cum';
+  const rev26 = m ? cum(REV26) : REV26, cash26 = m ? cum(CASH26) : CASH26, rev25 = m ? cum(REV25) : REV25;
+  const pad = a => a.concat(Array(12-a.length).fill(null));
+  const series = [
+    {label:'Выручка '+YEAR, color:'var(--s1)', values:pad(rev26), end:true},
+    {label:'Поступления '+YEAR, color:'var(--s2)', values:pad(cash26), end:true},
+    {label:'Выручка '+(YEAR-1), color:'var(--gray)', dash:true, values:rev25},
+  ];
+  const lg = $('#revLegend'); lg.textContent = '';
+  series.forEach(s => { const sp = el('span'); const i = el('i', s.dash?'dash':''); i.style.borderTopColor = s.color; sp.append(i, document.createTextNode(s.label)); lg.append(sp); });
+  document.querySelectorAll('#revMode button').forEach(b => b.setAttribute('aria-pressed', b.dataset.m===revMode));
+  document.querySelectorAll('#revView button').forEach(b => b.setAttribute('aria-pressed', b.dataset.v===revView));
+  if (revView==='table') {
+    host.textContent = '';
+    const w = el('div','dtbl'); const t = el('table'); const hd = el('tr');
+    ['Месяц',...series.map(s=>s.label)].forEach((h,i) => hd.append(Object.assign(el('th',i?'num':'',h))));
+    const th = el('thead'); th.append(hd); t.append(th); const tb = el('tbody');
+    MONTHS.forEach((mn,i) => { const r = el('tr'); r.style.cursor='default';
+      [mn+(i===cur?' (неполн.)':''), ...series.map(s => s.values[i]==null ? '—' : nf(s.values[i],1))].forEach((v,j) => r.append(el('td',j?'num':'',v))); tb.append(r); });
+    t.append(tb); w.append(t); host.append(w); return;
+  }
+  lineChart(host, {labels:MONTHS, series, fmt:v=>nf(v,1)+' млн ₽', aria:'Выручка и поступления по месяцам',
+    tipHead:i => MONTHS[i]+' '+YEAR+(i===cur?' — неполный месяц':'')});
+}
+$('#revMode').onclick = e => { const b=e.target.closest('button'); if(b){ revMode=b.dataset.m; renderRev(); } };
+$('#revView').onclick = e => { const b=e.target.closest('button'); if(b){ revView=b.dataset.v; renderRev(); } };
+
+/* ===== карточка КП ====================================================== */
+const drawer = $('#drawer'), scrim = $('#scrim');
+let lastFocus = null;
+function openKp(id) {
+  const k = KP.find(x=>x.id===id); if (!k) return;
+  lastFocus = document.activeElement;
+  drawer.textContent = '';
+  const h = el('div','dh'); const hb = el('div');
+  const t = el('h3','','КП '+k.id); t.id = 'dTitle';
+  hb.append(t, el('div','sub',k.client), el('div','sub',k.obj));
+  const x = el('button','close','Закрыть'); x.onclick = closeKp; h.append(hb, x); drawer.append(h);
+
+  const s1 = el('div','sec'); s1.append(el('h4','','Деньги клиента (1С, с НДС)'));
+  const kv = el('div','kv');
+  [['Сумма заказов',k.sum,'с '+new Date(k.date).toLocaleDateString('ru-RU')],['Выполнено актами',k.done,pct(k.done/k.sum)+' суммы'],['Оплачено',k.paid,pct(k.paid/k.sum)+' суммы']]
+    .forEach(([l,v,s]) => { const d = el('div'); d.append(el('div','l',l), el('div','v',v ? mlnOrK(v)+' ₽' : '0 ₽'), el('div','s',s)); kv.append(d); });
+  s1.append(kv);
+  s1.append(el('div','foot','Осталось выполнить: '+rub(k.sum-k.done)));
+  if (k.done > k.paid) s1.append(el('div','foot','Клиент должен по выполненным работам: '+rub(k.done-k.paid)));
+  else if (k.paid > k.done) s1.append(el('div','foot','Оплачено вперёд (аванс): '+rub(k.paid-k.done)));
+  drawer.append(s1);
+
+  const s2 = el('div','sec'); s2.append(el('h4','','Затраты по закупкам (1С, с НДС)'));
+  const kv2 = el('div','kv');
+  [['Подрядчикам оплачено',k.sub,pct(k.sub/k.sum)+' суммы'],['Материалов привезено',k.mat,pct(k.mat/k.sum)+' суммы'],['Всего',k.sub+k.mat,pct((k.sub+k.mat)/k.sum)+' суммы']]
+    .forEach(([l,v,sub]) => { const d = el('div'); d.append(el('div','l',l), el('div','v',v ? mlnOrK(v)+' ₽' : '0 ₽'), el('div','s',sub)); kv2.append(d); });
+  s2.append(kv2);
+  s2.append(el('div','foot','Материалы — поступления товаров по сделке, подрядчики — оплаты по закупкам «Услуги субподрядчиков». Оплаты вперёд до оформления закупки не учтены.'));
+  drawer.append(s2);
+
+  scrim.classList.add('open'); drawer.classList.add('open'); drawer.focus();
+  }
+function closeKp() { scrim.classList.remove('open'); drawer.classList.remove('open'); if (lastFocus) lastFocus.focus(); }
+scrim.onclick = closeKp;
+document.addEventListener('keydown', e => { if (e.key==='Escape' && drawer.classList.contains('open')) closeKp(); });
+
+/* ===== тема ============================================================= */
+const root = document.documentElement;
+try { const s = localStorage.getItem('tkn-theme'); if (s) root.dataset.theme = s; } catch(e) {}
+$('#themeBtn').onclick = () => {
+  const dark = root.dataset.theme ? root.dataset.theme==='dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  root.dataset.theme = dark ? 'light' : 'dark';
+  try { localStorage.setItem('tkn-theme', root.dataset.theme); } catch(e) {}
+};
+
+/* ===== запуск =========================================================== */
+function applyOnec(d) {
+  TODAY = new Date(d.today); YEAR = d.year;
+  REV26 = d.revenue.map(v=>v/1e6); CASH26 = d.receipts.map(v=>v/1e6); REV25 = d.revenuePrev.map(v=>v/1e6);
+  RAW_DEBT.ar = d.ar; RAW_DEBT.ap = d.ap; rebuildDebt(); KP = d.kp || [];
+  CONTRACTS = d.contracts; CONTRACTS_ACTIVE = d.contracts.length;
+  const t = new Date(d.updated);
+  $('#fresh1c').textContent = '1С · ' + t.toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+  renderTiles(); renderDebt(); renderRev(); renderContracts(); renderKp();
+}
+renderTasks(); renderKp();
+(async function load() {
+  try {
+    const api = location.protocol === 'file:' ? 'http://localhost:3000/api/data' : '/api/data';
+    let r; try { r = await fetch(api); } catch { throw new Error('сервер не запущен — запустите start.cmd'); }
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || r.status);
+    applyOnec(d);
+  } catch (e) {
+    $('#fresh1c').textContent = '1С · нет данных';
+    $('#debtBars').textContent = 'Не удалось получить данные из 1С: ' + e.message;
+  }
+})();
+let rz; addEventListener('resize', () => { cancelAnimationFrame(rz); rz = requestAnimationFrame(() => { if (revView==='chart') renderRev(); if (drawer.classList.contains('open')) { const id = drawer.querySelector('h3').textContent.replace('КП ',''); const y = drawer.scrollTop; openKp(id); drawer.scrollTop = y; } }); });
+</script>
+</body>
+</html>
