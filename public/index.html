@@ -215,7 +215,10 @@ table.kp .ell { max-width: 230px; overflow: hidden; text-overflow: ellipsis; whi
 .docs { list-style: none; font-size: 13px; }
 .docs li { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-top: 1px solid var(--line-soft); }
 .docs li:first-child { border-top: 0; }
-.docs .src { color: var(--muted); font-size: 12px; }
+.docs .src, .who .src { color: var(--muted); font-size: 12px; }
+.who { margin-top: 14px; }
+.who h5 { font-size: 12.5px; font-weight: 650; color: var(--text-2); margin-bottom: 4px; }
+.who .docs b { font-weight: 650; white-space: nowrap; }
 
 .foot { margin-top: 18px; color: var(--muted); font-size: 12.5px; }
 
@@ -681,6 +684,14 @@ function openKp(id) {
   [['Подрядчикам оплачено',k.sub,pct(k.sub/k.sum)+' суммы'],['Материалов привезено',k.mat,pct(k.mat/k.sum)+' суммы'],['Всего',k.sub+k.mat,pct((k.sub+k.mat)/k.sum)+' суммы']]
     .forEach(([l,v,sub]) => { const d = el('div'); d.append(el('div','l',l), el('div','v',v ? mlnOrK(v)+' ₽' : '0 ₽'), el('div','s',sub)); kv2.append(d); });
   s2.append(kv2);
+  const who = (title, list, total) => {
+    const b = el('div','who'); b.append(el('h5','',title));
+    if (!list || !list.length) { b.append(el('div','src','нет данных')); return b; }
+    const ul = el('ul','docs');
+    list.forEach(r => { const li = el('li'); li.append(el('span','',r.name), el('b','',rub(r.sum))); ul.append(li); });
+    b.append(ul); return b;
+  };
+  s2.append(who('Кому заплатили (подрядчики)', k.subBy), who('От кого получили товары (материалы)', k.matBy));
   s2.append(el('div','foot','Материалы — поступления товаров по сделке, подрядчики — оплаты по закупкам «Услуги субподрядчиков». Оплаты вперёд до оформления закупки не учтены.'));
   drawer.append(s2);
 
