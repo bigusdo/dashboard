@@ -22,10 +22,15 @@ async function login() {
   session = { token: j.access_token, api: j.api_url };
 }
 
-async function api(path, retry = true) {
+// opts: { json } — тело JSON (POST), { form } — multipart (загрузка файла)
+async function api(path, opts = {}, retry = true) {
   if (!session) await login();
-  const r = await fetch(session.api + path, { headers: { Authorization: 'Bearer ' + session.token }, signal: AbortSignal.timeout(60000) });
-  if (r.status === 401 && retry) { session = null; return api(path, false); }
+  const headers = { Authorization: 'Bearer ' + session.token };
+  const init = { headers, signal: AbortSignal.timeout(120000) };
+  if (opts.json) { init.method = 'POST'; headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(opts.json); }
+  if (opts.form) { init.method = 'POST'; init.body = opts.form; }
+  const r = await fetch(session.api + path, init);
+  if (r.status === 401 && retry) { session = null; return api(path, opts, false); }
   if (!r.ok) throw new Error(`Pyrus ${r.status}: ${path.split('?')[0]}`);
   return r.json();
 }
@@ -36,6 +41,30 @@ async function pool(items, size, fn) {
   await Promise.all(Array.from({ length: size }, async () => { while (i < items.length) { const k = i++; out[k] = await fn(items[k]); } }));
   return out;
 }
+
+// Ответ на задачу от имени бота: файлы сначала грузятся в Pyrus, затем прикладываются к комментарию.
+// files: [{ name, data: Buffer }]. Возвращает id созданного комментария.
+export async function postComment(taskId, text, files = []) {
+  const attachments = [];
+  for (const f of files) {
+    const form = new FormData();
+    form.append('file', new Blob([f.data]), f.name);
+    const up = await api('files/upload', { form });
+    if (!up.guid) throw new Error('Pyrus не принял файл ' + f.name);
+    attachments.push({ guid: up.guid });
+  }
+  const body = { text };
+  if (attachments.length) body.attachments = attachments;
+  const r = await api(`tasks/${taskId}/comments`, { json: body });
+  return r.task?.comments?.at(-1)?.id ?? null;
+}
+
+// Только для проверки: личная задача бота (её никто, кроме бота, не видит).
+export const _test = {
+  create: text => api('tasks', { json: { text, subject: text } }).then(r => r.task.id),
+  close: id => api(`tasks/${id}/comments`, { json: { action: 'finished' } }),
+  get: id => api('tasks/' + id).then(r => r.task),
+};
 
 const KP_RE = /КП\s*№?\s*(\d{2,5})/i;
 const short = p => p ? [p.last_name, p.first_name && p.first_name[0] + '.'].filter(Boolean).join(' ') || p.first_name || '—' : 'Не назначен';
