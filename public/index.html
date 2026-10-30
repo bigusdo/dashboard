@@ -251,10 +251,10 @@ table.kp .ell { max-width: 230px; overflow: hidden; text-overflow: ellipsis; whi
 
   <header class="top">
     <div class="brand">ТКН-Управление<small>Дашборд</small></div>
-    <span class="chip demo" title="Плитки, долги, выручка и договоры — из 1С. Задачи и таблица КП пока демо.">Pyrus и КП — демо</span>
     <div class="spacer"></div>
     <div class="fresh" aria-label="Свежесть данных">
       <span class="chip"><i></i><span id="fresh1c">1С · загрузка…</span></span>
+      <span class="chip"><i></i><span id="freshPy">Pyrus · загрузка…</span></span>
     </div>
     <button class="icon-btn" id="themeBtn" aria-label="Переключить тему">Тема</button>
   </header>
@@ -377,24 +377,9 @@ function topWithRest(list) {
 
 let KP = [];
 
-const TASKS = [
- {t:'Согласовать акт выполненных работ (этап 2)', kp:'1217', who:'Вы', own:'me', due:0, idle:1},
- {t:'Подписать допсоглашение № 2', kp:'1204', who:'Вы', own:'me', due:-2, idle:2},
- {t:'Утвердить счёт «Вент-Снаб» на воздуховоды', kp:'1217', who:'Вы', own:'me', due:1, idle:0},
- {t:'Решение по аналогу чиллера', kp:'1209', who:'Вы', own:'me', due:3, idle:0},
- {t:'Проверить смету допработ', kp:'1238', who:'Вы', own:'me', due:2, idle:1},
- {t:'Согласовать график ТО на ноябрь', kp:'1231', who:'Вы', own:'me', due:5, idle:0},
- {t:'Получить документы на шкафы управления', kp:'1204', who:'Петров С.', own:'staff', due:-4, idle:6},
- {t:'Запросить счёт на дымоудаление', kp:'1204', who:'Смирнова Е.', own:'staff', due:-1, idle:3},
- {t:'Передать исполнительную документацию', kp:'1189', who:'Кузнецов Д.', own:'staff', due:-3, idle:5},
- {t:'Пусконаладка приточной установки', kp:'1238', who:'Орлов П.', own:'staff', due:10, idle:4},
- {t:'Сверка актов с заказчиком', kp:'1225', who:'Васильева Н.', own:'staff', due:2, idle:3},
- {t:'Монтаж воздуховодов, секция 2', kp:'1217', who:'Иванов А.', own:'staff', due:4, idle:1},
- {t:'Заявка на материалы, цех 3', kp:'1238', who:'Смирнова Е.', own:'staff', due:6, idle:0},
- {t:'Закупка частотных преобразователей', kp:'1225', who:'Смирнова Е.', own:'staff', due:8, idle:1},
- {t:'Выезд на объект: диагностика СВИК', kp:'1242', who:'Орлов П.', own:'staff', due:3, idle:0},
- {t:'Монтаж блоков ТО, подвал', kp:'1231', who:'Иванов А.', own:'staff', due:7, idle:2},
-];
+/* Задачи Pyrus приходят с /api/tasks (см. applyTasks). */
+let TASKS = [];
+let TASKS_STATE = 'загрузка…';
 
 /* ===== вспомогательное ================================================= */
 const $ = s => document.querySelector(s);
@@ -426,40 +411,71 @@ function renderTiles(){
 }
 
 /* ===== задачи ========================================================== */
+/* Открытые задачи Pyrus. У большинства срок не задан — их считаем просроченными (договорённость: сроки правятся постепенно). */
 const taskTabs = [
-  {k:'me',   label:'Мне',        f:t=>t.own==='me'},
-  {k:'over', label:'Просрочено', f:t=>t.due<0, alert:true},
-  {k:'idle', label:'Зависли',    f:t=>t.own==='staff' && t.idle>=3},
+  {k:'all',  label:'Все',        f:t=>true},
+  {k:'me',   label:'Мне',        f:t=>t.me},
+  {k:'over', label:'Просрочено', f:t=>t.dd==null || t.dd<0, alert:true},
+  {k:'idle', label:'Зависли',    f:t=>!t.me && t.idle>=3},
 ];
-let taskTab = 'me';
+let taskTab = 'all', taskAll = false;
+const TASKS_SHOWN = 10;
+function taskSort(a, b) {
+  if (taskTab==='idle') return b.idle-a.idle;
+  if (a.dd!=null && b.dd!=null) return a.dd-b.dd;
+  if (a.dd!=null) return -1; if (b.dd!=null) return 1;
+  return a.modified<b.modified ? -1 : 1;   // без срока: дольше без движения — выше
+}
 function renderTasks() {
   const box = $('#taskTabs'); box.textContent = '';
   taskTabs.forEach(tb => {
     const n = TASKS.filter(tb.f).length;
     const b = el('button','',tb.label); b.setAttribute('role','tab'); b.setAttribute('aria-selected', tb.k===taskTab);
     const c = el('span','n'+(tb.alert&&n?' alert':''), n); b.append(c);
-    b.onclick = () => { taskTab = tb.k; renderTasks(); };
+    b.onclick = () => { taskTab = tb.k; taskAll = false; renderTasks(); };
     box.append(b);
   });
   const list = $('#taskList'); list.textContent = '';
   const tab = taskTabs.find(x=>x.k===taskTab);
-  const rows = TASKS.filter(tab.f).sort((a,b)=> taskTab==='idle' ? b.idle-a.idle : a.due-b.due);
-  rows.forEach(t => {
+  const rows = TASKS.filter(tab.f).sort(taskSort);
+  (taskAll ? rows : rows.slice(0, TASKS_SHOWN)).forEach(t => {
     const li = el('li','task');
-    li.append(el('div','t',t.t));
+    const a = el('a','t',t.t); a.href = t.url; a.target = '_blank'; a.rel = 'noopener'; a.title = 'Открыть задачу в Pyrus';
+    a.style.color = 'inherit'; a.style.textDecoration = 'none';
+    li.append(a);
     const r = el('div','r');
-    if (t.due < 0) r.append(el('span','badge b-crit','✕ просрочено '+(-t.due)+' дн.'));
+    if (t.dd!=null && t.dd < 0) r.append(el('span','badge b-crit','✕ просрочено '+(-t.dd)+' дн.'));
     else if (taskTab==='idle') r.append(el('span','badge b-warn','▲ без движения '+t.idle+' дн.'));
-    else r.append(el('span','badge b-mute', t.due===0 ? 'срок сегодня' : 'через '+t.due+' дн.'));
+    else if (t.dd==null) r.append(el('span','badge b-warn','срок не задан'));
+    else r.append(el('span','badge b-mute', t.dd===0 ? 'срок сегодня' : 'через '+t.dd+' дн.'));
     li.append(r);
     const m = el('div','m');
-    const kp = el('a','kp-link','КП '+t.kp); kp.onclick = () => openKp(t.kp); kp.tabIndex = 0; kp.onkeydown = e => { if(e.key==='Enter') openKp(t.kp); };
-    m.append(kp, el('span','',t.who));
-    if (taskTab==='idle' && t.due<0) m.append(el('span','', 'и срок вышел'));
+    if (t.kp && KP.some(k=>k.id===t.kp)) {
+      const kp = el('a','kp-link','КП '+t.kp); kp.onclick = () => openKp(t.kp); kp.tabIndex = 0; kp.onkeydown = e => { if(e.key==='Enter') openKp(t.kp); };
+      m.append(kp);
+    } else if (t.kp) m.append(el('span','','КП '+t.kp));
+    else m.append(el('span','tone-warn','нет номера КП'));
+    m.append(el('span','',t.who));
+    const tag = [...t.obj, ...t.type].join(' · '); if (tag) m.append(el('span','',tag));
+    if (t.status.length) m.append(el('span','',t.status.join(' · ')));
+    if (taskTab!=='idle' && t.idle>=3) m.append(el('span','','без движения '+t.idle+' дн.'));
     li.append(m);
     list.append(li);
   });
-  if (!rows.length) list.append(el('li','task','Здесь пусто — всё в порядке.'));
+  if (!rows.length) list.append(el('li','task', TASKS_STATE==='ok' ? 'Здесь пусто — всё в порядке.' : TASKS_STATE));
+  else if (rows.length > TASKS_SHOWN) {
+    const li = el('li','task'); const b = el('button','link', taskAll ? 'Свернуть' : 'Показать все '+rows.length);
+    b.type = 'button'; b.style.cssText = 'background:none;border:0;padding:0;color:var(--text);text-decoration:underline;cursor:pointer;font:inherit;justify-self:start';
+    b.onclick = () => { taskAll = !taskAll; renderTasks(); };
+    li.append(b); list.append(li);
+  }
+}
+function applyTasks(d) {
+  TASKS = d.tasks.map(t => ({...t, dd: t.due ? dayDiff(t.due) : null, idle: Math.max(0, Math.round((TODAY - new Date(t.modified))/864e5))}));
+  TASKS_STATE = 'ok';
+  $('#freshPy').textContent = 'Pyrus · ' + new Date(d.updated).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+  renderTasks();
+  if (KP.length) renderKp();
 }
 
 /* ===== долги =========================================================== */
@@ -695,6 +711,13 @@ function openKp(id) {
   s2.append(el('div','foot','Материалы — поступления товаров по сделке, подрядчики — оплаты по закупкам «Услуги субподрядчиков». Оплаты вперёд до оформления закупки не учтены.'));
   drawer.append(s2);
 
+  const mine = TASKS.filter(t => t.kp === k.id);
+  const s3 = el('div','sec'); s3.append(el('h4','','Задачи Pyrus по КП ('+mine.length+')'));
+  if (!mine.length) s3.append(el('div','foot','Открытых задач с номером этого КП нет.'));
+  else { const ul = el('ul','docs'); mine.forEach(t => { const li = el('li'); const a = el('a','',t.t); a.href = t.url; a.target = '_blank'; a.rel = 'noopener'; a.style.color = 'inherit';
+    li.append(a, el('b','',t.status.join(' · ') || t.who)); ul.append(li); }); s3.append(ul); }
+  drawer.append(s3);
+
   scrim.classList.add('open'); drawer.classList.add('open'); drawer.focus();
   }
 function closeKp() { scrim.classList.remove('open'); drawer.classList.remove('open'); if (lastFocus) lastFocus.focus(); }
@@ -721,6 +744,19 @@ function applyOnec(d) {
   renderTiles(); renderDebt(); renderRev(); renderContracts(); renderKp();
 }
 renderTasks(); renderKp();
+async function loadTasks() {
+  try {
+    const api = location.protocol === 'file:' ? 'http://localhost:3000/api/tasks' : '/api/tasks';
+    let r; try { r = await fetch(api); } catch { throw new Error('сервер не запущен — запустите start.cmd'); }
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || r.status);
+    applyTasks(d);
+  } catch (e) {
+    $('#freshPy').textContent = 'Pyrus · нет данных';
+    if (!TASKS.length) { TASKS_STATE = 'Не удалось получить задачи Pyrus: ' + e.message; renderTasks(); }
+  }
+}
+loadTasks(); setInterval(loadTasks, 3 * 60_000);
 (async function load() {
   try {
     const api = location.protocol === 'file:' ? 'http://localhost:3000/api/data' : '/api/data';

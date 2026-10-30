@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 export const BASE = process.env.ONEC_URL || 'https://1cfresh.com/a/ca/1779469/odata/standard.odata/';
 
 // На Windows берём актуальные значения из переменных пользователя (реестр): процесс мог запуститься до их обновления.
-function userVar(name) {
+export function userVar(name) {
   if (process.platform === 'win32') {
     try {
       const out = execFileSync('reg', ['query', 'HKCU\\Environment', '/v', name], { encoding: 'utf8' });
