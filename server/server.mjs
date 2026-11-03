@@ -42,6 +42,7 @@ async function refreshTasks() {
   } catch (e) {
     tasksError = e.message.split('\n')[0];
     console.error(new Date().toLocaleTimeString('ru-RU'), 'ошибка Pyrus:', tasksError);
+    setTimeout(refreshTasks, 30_000); // сбой сети не должен держать страницу без задач до следующего планового обновления
   } finally { tasksBusy = false; }
 }
 
