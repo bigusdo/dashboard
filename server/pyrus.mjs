@@ -59,6 +59,9 @@ export async function postComment(taskId, text, files = []) {
   return r.task?.comments?.at(-1)?.id ?? null;
 }
 
+// Закрытие задачи (комментарий с действием «finished»); необратимо только в смысле уведомлений — в Pyrus задачу можно открыть заново.
+export const closeTask = (taskId, text) => api(`tasks/${taskId}/comments`, { json: { text, action: 'finished' } });
+
 // Только для проверки: личная задача бота (её никто, кроме бота, не видит).
 export const _test = {
   create: text => api('tasks', { json: { text, subject: text } }).then(r => r.task.id),

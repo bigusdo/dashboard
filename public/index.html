@@ -343,6 +343,13 @@ table.kp .ell { max-width: 230px; overflow: hidden; text-overflow: ellipsis; whi
       <div class="kp-more"><button class="fchip" id="kpMore" hidden></button></div>
     </section>
 
+    <!-- уборка задач Pyrus -->
+    <section class="card span-12" aria-labelledby="h-clean">
+      <div class="card-h"><h2 id="h-clean">Уборка задач Pyrus</h2><span class="sub" id="cleanSub"></span></div>
+      <div class="tf-chips" id="cleanFilters" style="margin-bottom:6px"></div>
+      <ul class="tasks" id="cleanList"></ul>
+    </section>
+
     <!-- сверка Pyrus и 1С -->
     <section class="card span-12" aria-labelledby="h-recon">
       <div class="card-h"><h2 id="h-recon">Сверка Pyrus и 1С</h2><span class="sub" id="reconSub"></span></div>
@@ -571,6 +578,58 @@ function replyForm(t, li) {
   setTimeout(() => ta.focus());
   return f;
 }
+/* ===== уборка задач Pyrus ============================================== */
+/* Все открытые задачи, у которых есть причина для проверки; закрыть можно прямо отсюда (от имени MainBot, с пометкой «из дашборда»). */
+const STALE_DAYS = 90, CLEAN_SHOWN = 15;
+const CLEAN_REASONS = [
+  {k:'done',  label:'Оплачено / выполнено, но открыта', f:t => t.status.some(s => s==='Оплачено' || s==='Выполнено')},
+  {k:'multi', label:'Несколько статусов', f:t => t.status.length > 1},
+  {k:'nost',  label:'Нет статуса', f:t => !t.status.length},
+  {k:'nokp',  label:'Нет номера КП', f:t => !t.kp},
+  {k:'idle',  label:'Без движения 90+ дн.', f:t => t.idle >= STALE_DAYS},
+];
+let cleanKey = '', cleanAll = false;
+function renderClean() {
+  const fb = $('#cleanFilters'), ul = $('#cleanList'); if (!fb) return; fb.textContent = ''; ul.textContent = '';
+  const flagged = TASKS.map(t => ({t, why: CLEAN_REASONS.filter(r => r.f(t))})).filter(x => x.why.length);
+  $('#cleanSub').textContent = TASKS_STATE === 'ok' ? 'на проверку: '+flagged.length+' из '+TASKS.length : '';
+  if (TASKS_STATE !== 'ok') { ul.append(el('li','task',TASKS_STATE)); return; }
+  const mk = (k, label, n) => { const b = el('button','tf-chip',label); b.type = 'button'; b.setAttribute('aria-pressed', cleanKey===k); b.append(el('b','',n)); b.onclick = () => { cleanKey = k; cleanAll = false; renderClean(); }; fb.append(b); };
+  mk('', 'Все', flagged.length);
+  CLEAN_REASONS.forEach(r => mk(r.k, r.label, flagged.filter(x => x.why.includes(r)).length));
+  const rows = flagged.filter(x => !cleanKey || x.why.some(r => r.k===cleanKey)).sort((a,b) => b.t.idle - a.t.idle);
+  (cleanAll ? rows : rows.slice(0, CLEAN_SHOWN)).forEach(({t, why}) => {
+    const li = el('li','task');
+    const a = el('a','t',t.t); a.href = t.url; a.target = '_blank'; a.rel = 'noopener'; a.title = 'Открыть задачу в Pyrus'; a.style.color = 'inherit'; a.style.textDecoration = 'none';
+    li.append(a);
+    const r = el('div','r'); r.append(el('span', 'badge '+(t.idle>=STALE_DAYS?'b-crit':'b-warn'), 'без движения '+t.idle+' дн.')); li.append(r);
+    const m = el('div','m');
+    m.append(el('span', t.kp?'':'tone-warn', t.kp ? 'КП '+t.kp : 'нет номера КП'), el('span','',t.who));
+    const tag = [...t.obj, ...t.type].join(' · '); if (tag) m.append(el('span','',tag));
+    m.append(el('span', t.status.length?'':'tone-warn', t.status.length ? t.status.join(' · ') : 'нет статуса'));
+    li.append(m);
+    const act = el('div','act'); act.style.display = 'flex'; act.style.gap = '14px'; act.style.alignItems = 'center';
+    const why2 = el('span','',why.map(x => x.label).join(' · ')); why2.style.cssText = 'color:var(--muted);font-size:12px;flex:1';
+    const cb = el('button','reply-btn','Закрыть задачу'); cb.type = 'button'; cb.style.color = 'var(--crit, #c0392b)';
+    const st = el('span','reply-st');
+    cb.onclick = async () => {
+      if (!confirm('Закрыть в Pyrus задачу?\n\n'+t.t+'\n\nВ задаче появится комментарий от MainBot, участники получат уведомление.')) return;
+      cb.disabled = true; st.textContent = 'Закрываю…';
+      try {
+        const r = await fetch('/api/tasks/'+t.id+'/close', {method:'POST'});
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || r.status);
+        TASKS = TASKS.filter(x => x.id !== t.id); renderTasks(); renderClean(); renderRecon(); loadTasks();
+      } catch (err) { st.textContent = 'Не закрыто: ' + err.message; cb.disabled = false; }
+    };
+    act.append(why2, st, cb); li.append(act); ul.append(li);
+  });
+  if (!rows.length) ul.append(el('li','task','Здесь пусто — всё в порядке.'));
+  else if (rows.length > CLEAN_SHOWN) {
+    const li = el('li','task'); const b = el('button','tf-reset', cleanAll ? 'Свернуть' : 'Показать все '+rows.length); b.type = 'button'; b.style.justifySelf = 'start';
+    b.onclick = () => { cleanAll = !cleanAll; renderClean(); }; li.append(b); ul.append(li);
+  }
+}
 /* ===== сверка Pyrus и 1С ============================================== */
 /* Что видно из сопоставления номеров КП: КП в работе по 1С без задачи, задачи без заказа в 1С или без номера, задачи, которые пора закрыть. */
 const RECON_SHOWN = 6;
@@ -611,7 +670,7 @@ function applyTasks(d) {
   TASKS = d.tasks.map(t => ({...t, dd: t.due ? dayDiff(t.due) : null, idle: Math.max(0, Math.round((TODAY - new Date(t.modified))/864e5))}));
   TASKS_STATE = 'ok';
   $('#freshPy').textContent = 'Pyrus · ' + new Date(d.updated).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
-  renderTasks(); renderRecon();
+  renderTasks(); renderClean(); renderRecon();
   if (KP.length) renderKp();
 }
 

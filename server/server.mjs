@@ -4,7 +4,7 @@
 import { createServer } from 'node:http';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { collect } from './collect.mjs';
-import { openTasks, postComment } from './pyrus.mjs';
+import { openTasks, postComment, closeTask } from './pyrus.mjs';
 
 const PORT = Number(process.env.PORT || 3000);
 const REFRESH_MS = Number(process.env.REFRESH_MIN || 30) * 60_000;
@@ -71,6 +71,20 @@ createServer(async (req, res) => {
   if (path === '/api/data') {
     if (data) return send(res, 200, data);
     return send(res, lastError ? 502 : 503, { error: lastError || 'Данные 1С ещё загружаются, обновите страницу через минуту' });
+  }
+  const mc = path.match(/^\/api\/tasks\/(\d+)\/close$/);
+  if (mc && req.method === 'POST') {
+    const origin = req.headers.origin;
+    if (origin !== `http://localhost:${PORT}` && origin !== `http://127.0.0.1:${PORT}`) return send(res, 403, { error: 'Запрос не со страницы дашборда' });
+    const id = Number(mc[1]);
+    if (!tasks?.some(t => t.id === id)) return send(res, 404, { error: 'Задача не найдена среди открытых' });
+    try {
+      await closeTask(id, '[из дашборда] Закрыто при уборке задач');
+      console.log(new Date().toLocaleTimeString('ru-RU'), 'задача закрыта', id);
+      tasks = tasks.filter(t => t.id !== id); // сразу убираем из кэша, пока не пришло плановое обновление
+      refreshTasks();
+      return send(res, 200, { ok: true });
+    } catch (e) { return send(res, 502, { error: e.message.split('\n')[0] }); }
   }
   const m = path.match(/^\/api\/tasks\/(\d+)\/comment$/);
   if (m && req.method === 'POST') {
