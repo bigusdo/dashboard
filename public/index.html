@@ -505,6 +505,8 @@ function renderTaskFilters() {
   box.append(sel);
 }
 const TASKS_SHOWN = 10;
+const fmtDate = s => new Date(s).toLocaleDateString('ru-RU', {day:'2-digit', month:'2-digit', year:'numeric'});
+const taskDates = t => [el('span','','создана '+fmtDate(t.created)), el('span', t.due ? (t.dd<0 ? 'tone-warn' : '') : '', t.due ? 'срок '+fmtDate(t.due) : 'срок не задан')];
 function taskSort(a, b) {
   if (taskTab==='idle') return b.idle-a.idle;
   if (a.dd!=null && b.dd!=null) return a.dd-b.dd;
@@ -545,6 +547,7 @@ function renderTasks() {
     const tag = [...t.obj, ...t.type].join(' · '); if (tag) m.append(el('span','',tag));
     if (t.status.length) m.append(el('span','',t.status.join(' · ')));
     if (taskTab!=='idle' && t.idle>=3) m.append(el('span','','без движения '+t.idle+' дн.'));
+    m.append(...taskDates(t));
     li.append(m);
     const act = el('div','act'); const rb = el('button','reply-btn','Ответить'); rb.type = 'button';
     rb.onclick = () => { const f = li.querySelector('.reply'); if (f) { f.remove(); return; } li.append(replyForm(t, li)); };
@@ -672,7 +675,7 @@ function renderClean() {
     const m = el('div','m');
     m.append(el('span', t.kp?'':'tone-warn', t.kp ? 'КП '+t.kp : 'нет номера КП'), el('span','',t.who));
     const tag = [...t.obj, ...t.type].join(' · '); if (tag) m.append(el('span','',tag));
-    m.append(el('span', t.status.length?'':'tone-warn', t.status.length ? t.status.join(' · ') : 'нет статуса'));
+    m.append(el('span', t.status.length?'':'tone-warn', t.status.length ? t.status.join(' · ') : 'нет статуса'), ...taskDates(t));
     li.append(m);
     const act = el('div','act'); act.style.display = 'flex'; act.style.gap = '14px'; act.style.alignItems = 'center';
     const why2 = el('span','',why.map(x => x.label).join(' · ')); why2.style.cssText = 'color:var(--muted);font-size:12px;flex:1';
