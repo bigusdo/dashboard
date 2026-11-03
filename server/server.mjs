@@ -107,7 +107,9 @@ createServer(async (req, res) => {
     const id = Number(mc[1]);
     if (!tasks?.some(t => t.id === id)) return send(res, 404, { error: 'Задача не найдена среди открытых' });
     try {
-      await closeTask(id, '[из дашборда] Закрыто при уборке задач');
+      let note = '';
+      try { note = String(JSON.parse(await readBody(req)).text || '').trim().slice(0, 2000); } catch {}
+      await closeTask(id, '[из дашборда] ' + (note || 'Закрыто при уборке задач'));
       console.log(new Date().toLocaleTimeString('ru-RU'), 'задача закрыта', id);
       tasks = tasks.filter(t => t.id !== id); // сразу убираем из кэша, пока не пришло плановое обновление
       refreshTasks();

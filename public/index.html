@@ -682,10 +682,11 @@ function renderClean() {
     const cb = el('button','reply-btn','Закрыть задачу'); cb.type = 'button'; cb.style.color = 'var(--crit, #c0392b)';
     const st = el('span','reply-st');
     cb.onclick = async () => {
-      if (!confirm('Закрыть в Pyrus задачу?\n\n'+t.t+'\n\nВ задаче появится комментарий от MainBot, участники получат уведомление.')) return;
+      const note = prompt('Закрыть в Pyrus задачу?\n\n'+t.t+'\n\nКомментарий к закрытию (можно оставить пустым). Он появится в задаче от MainBot, участники получат уведомление.', '');
+      if (note === null) return;
       cb.disabled = true; st.textContent = 'Закрываю…';
       try {
-        const r = await fetch('/api/tasks/'+t.id+'/close', {method:'POST'});
+        const r = await fetch('/api/tasks/'+t.id+'/close', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({text: note.trim()})});
         const d = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(d.error || r.status);
         TASKS = TASKS.filter(x => x.id !== t.id); renderTasks(); renderClean(); renderRecon(); loadTasks();
