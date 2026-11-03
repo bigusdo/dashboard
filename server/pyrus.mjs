@@ -89,6 +89,12 @@ export async function createTask({ subject, text, responsible, due, list_ids = [
   return r.task.id;
 }
 
+// Смена списков (меток) задачи: добавить и/или убрать, комментарием без текста.
+export const changeLists = (taskId, add, remove) => api(`tasks/${taskId}/comments`, { json: { added_list_ids: add, removed_list_ids: remove } });
+
+// Переименование задачи (новый заголовок — полем subject в комментарии).
+export const renameTask = (taskId, subject) => api(`tasks/${taskId}/comments`, { json: { subject } });
+
 // Закрытие задачи (комментарий с действием «finished»); необратимо только в смысле уведомлений — в Pyrus задачу можно открыть заново.
 export const closeTask = (taskId, text) => api(`tasks/${taskId}/comments`, { json: { text, action: 'finished' } });
 

@@ -4,7 +4,7 @@
 import { createServer } from 'node:http';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { collect } from './collect.mjs';
-import { openTasks, postComment, closeTask, meta, createTask } from './pyrus.mjs';
+import { openTasks, postComment, closeTask, meta, createTask, changeLists, renameTask } from './pyrus.mjs';
 
 const PORT = Number(process.env.PORT || 3000);
 const REFRESH_MS = Number(process.env.REFRESH_MIN || 30) * 60_000;
@@ -98,6 +98,41 @@ createServer(async (req, res) => {
       console.log(new Date().toLocaleTimeString('ru-RU'), 'создана задача', id, files.length ? `+ файлов: ${files.length}` : '');
       refreshTasks();
       return send(res, 200, { ok: true, id, url: 'https://pyrus.com/t#id' + id });
+    } catch (e) { return send(res, 502, { error: e.message.split('\n')[0] }); }
+  }
+  const ml = path.match(/^\/api\/tasks\/(\d+)\/lists$/);
+  if (ml && req.method === 'POST') {
+    const origin = req.headers.origin;
+    if (origin !== `http://localhost:${PORT}` && origin !== `http://127.0.0.1:${PORT}`) return send(res, 403, { error: 'Запрос не со страницы дашборда' });
+    if (!/^application\/json/.test(req.headers['content-type'] || '')) return send(res, 415, { error: 'Нужен JSON' });
+    const id = Number(ml[1]);
+    if (!tasks?.some(t => t.id === id)) return send(res, 404, { error: 'Задача не найдена среди открытых' });
+    try {
+      const b = JSON.parse(await readBody(req));
+      const known = new Set((metaCache ||= await meta()).lists.map(l => l.id));
+      const ids = a => (Array.isArray(a) ? a : []).map(Number).filter(i => known.has(i));
+      const add = ids(b.add), remove = ids(b.remove);
+      if (!add.length && !remove.length) return send(res, 400, { error: 'Нечего менять' });
+      await changeLists(id, add, remove);
+      console.log(new Date().toLocaleTimeString('ru-RU'), 'списки задачи', id, '+', add.join(','), '−', remove.join(','));
+      await refreshTasks();
+      return send(res, 200, { ok: true });
+    } catch (e) { return send(res, 502, { error: e.message.split('\n')[0] }); }
+  }
+  const ms = path.match(/^\/api\/tasks\/(\d+)\/subject$/);
+  if (ms && req.method === 'POST') {
+    const origin = req.headers.origin;
+    if (origin !== `http://localhost:${PORT}` && origin !== `http://127.0.0.1:${PORT}`) return send(res, 403, { error: 'Запрос не со страницы дашборда' });
+    if (!/^application\/json/.test(req.headers['content-type'] || '')) return send(res, 415, { error: 'Нужен JSON' });
+    const id = Number(ms[1]);
+    if (!tasks?.some(t => t.id === id)) return send(res, 404, { error: 'Задача не найдена среди открытых' });
+    try {
+      const subject = String(JSON.parse(await readBody(req)).subject || '').trim().slice(0, 300);
+      if (!subject) return send(res, 400, { error: 'Пустой заголовок' });
+      await renameTask(id, subject);
+      console.log(new Date().toLocaleTimeString('ru-RU'), 'переименована задача', id);
+      await refreshTasks();
+      return send(res, 200, { ok: true });
     } catch (e) { return send(res, 502, { error: e.message.split('\n')[0] }); }
   }
   const mc = path.match(/^\/api\/tasks\/(\d+)\/close$/);

@@ -505,6 +505,32 @@ function renderTaskFilters() {
   box.append(sel);
 }
 const TASKS_SHOWN = 10;
+/* Заголовок задачи: клик — правка на месте (Enter сохраняет в Pyrus, Esc отменяет), «↗ Pyrus» — переход в задачу. */
+function taskTitle(t) {
+  const box = el('div','t'); box.style.cssText = 'display:flex;gap:8px;align-items:baseline;min-width:0';
+  const name = el('span','',t.t); name.title = 'Нажмите, чтобы переименовать'; name.style.cssText = 'cursor:text;min-width:0;overflow-wrap:anywhere';
+  const go = el('a','','↗ Pyrus'); go.href = t.url; go.target = '_blank'; go.rel = 'noopener'; go.title = 'Открыть задачу в Pyrus';
+  go.style.cssText = 'color:var(--s1);font-size:12px;font-weight:500;white-space:nowrap;text-decoration:none';
+  name.onclick = () => {
+    const inp = el('input'); inp.type = 'text'; inp.value = t.t; inp.maxLength = 300; inp.setAttribute('aria-label','Название задачи');
+    inp.style.cssText = 'flex:1;min-width:0;font:inherit;border:1px solid var(--line);border-radius:6px;padding:2px 6px;background:var(--surface);color:var(--text)';
+    const st = el('span','reply-st'); let busy = false;
+    const back = () => { inp.replaceWith(name); st.remove(); go.hidden = false; };
+    const save = async () => {
+      const v = inp.value.trim(); if (busy) return;
+      if (!v || v === t.t) return back();
+      busy = true; inp.disabled = true; st.textContent = 'Сохраняю…';
+      try {
+        const r = await fetch('/api/tasks/'+t.id+'/subject', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({subject: v})});
+        const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.error || r.status);
+        await loadTasks();
+      } catch (err) { st.textContent = 'Не сохранено: ' + err.message; inp.disabled = false; busy = false; }
+    };
+    inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); save(); } else if (e.key === 'Escape') back(); };
+    go.hidden = true; name.replaceWith(inp); box.append(st); inp.focus(); inp.select();
+  };
+  box.append(name, go); return box;
+}
 const fmtDate = s => new Date(s).toLocaleDateString('ru-RU', {day:'2-digit', month:'2-digit', year:'numeric'});
 const taskDates = t => [el('span','','создана '+fmtDate(t.created)), el('span', t.due ? (t.dd<0 ? 'tone-warn' : '') : '', t.due ? 'срок '+fmtDate(t.due) : 'срок не задан')];
 function taskSort(a, b) {
@@ -528,9 +554,7 @@ function renderTasks() {
   const rows = TASKS.filter(passAll).filter(tab.f).sort(taskSort);
   (taskAll ? rows : rows.slice(0, TASKS_SHOWN)).forEach(t => {
     const li = el('li','task');
-    const a = el('a','t',t.t); a.href = t.url; a.target = '_blank'; a.rel = 'noopener'; a.title = 'Открыть задачу в Pyrus';
-    a.style.color = 'inherit'; a.style.textDecoration = 'none';
-    li.append(a);
+    li.append(taskTitle(t));
     const r = el('div','r');
     if (t.dd!=null && t.dd < 0) r.append(el('span','badge b-crit','✕ просрочено '+(-t.dd)+' дн.'));
     else if (taskTab==='idle') r.append(el('span','badge b-warn','▲ без движения '+t.idle+' дн.'));
@@ -551,7 +575,10 @@ function renderTasks() {
     li.append(m);
     const act = el('div','act'); const rb = el('button','reply-btn','Ответить'); rb.type = 'button';
     rb.onclick = () => { const f = li.querySelector('.reply'); if (f) { f.remove(); return; } li.append(replyForm(t, li)); };
-    act.append(rb); li.append(act);
+    act.append(rb);
+    const lb = el('button','reply-btn','Списки'); lb.type = 'button'; lb.style.marginLeft = '14px';
+    lb.onclick = () => { const f = li.querySelector('.reply'); if (f) { f.remove(); return; } li.append(listsForm(t, li)); };
+    act.append(lb); li.append(act);
     list.append(li);
   });
   if (!rows.length) list.append(el('li','task', TASKS_STATE==='ok' ? (fStatus||fObj||fType ? 'Нет задач под выбранные фильтры.' : 'Здесь пусто — всё в порядке.') : TASKS_STATE));
@@ -594,12 +621,49 @@ function replyForm(t, li) {
 /* Создаётся в Pyrus от имени MainBot: ответственный, списки (метки), описание, срок и файлы выбираются здесь. */
 let META = null;
 const ME_PYRUS = 364657;
+async function loadMeta() {
+  if (META) return META;
+  const r = await fetch('/api/meta'); const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || r.status);
+  return META = d;
+}
+/* Смена списков (объект / тип работ / статус) у существующей задачи: ставим и снимаем галочки, в Pyrus уходит разница. */
+function listsForm(t, li, after) {
+  const f = el('form','reply'); f.append('Загружаю списки…');
+  loadMeta().then(M => {
+    f.textContent = '';
+    const cur = new Set([...t.obj, ...t.type, ...t.status]), boxes = [];
+    [['obj','Объект'], ['type','Тип работ'], ['status','Статус']].forEach(([k, title]) => {
+      const g = el('div','nt-group'); g.append(el('span','',title)); const w = el('div','nt-checks');
+      M.lists.filter(l => l.kind === k).sort((a, b) => k === 'status' ? STATUS_ORDER.indexOf(a.name) - STATUS_ORDER.indexOf(b.name) : 0).forEach(l => {
+        const c = el('input'); c.type = 'checkbox'; c.checked = cur.has(l.name); c.dataset.was = c.checked ? '1' : ''; c.value = l.id; boxes.push(c);
+        const lab = el('label','nt-check'); lab.append(c, el('span','',l.name)); w.append(lab);
+      });
+      g.append(w); f.append(g);
+    });
+    const row = el('div','reply-row'); const save = el('button','reply-send','Сохранить списки'); save.type = 'submit';
+    const cancel = el('button','tf-reset','Отмена'); cancel.type = 'button'; cancel.onclick = () => f.remove();
+    const st = el('span','reply-st'); row.append(save, cancel, st); f.append(row);
+    f.onsubmit = async e => {
+      e.preventDefault();
+      const add = boxes.filter(c => c.checked && !c.dataset.was).map(c => Number(c.value)), remove = boxes.filter(c => !c.checked && c.dataset.was).map(c => Number(c.value));
+      if (!add.length && !remove.length) { st.textContent = 'Ничего не изменилось'; return; }
+      save.disabled = true; st.textContent = 'Сохраняю…';
+      try {
+        const r = await fetch('/api/tasks/'+t.id+'/lists', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({add, remove})});
+        const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.error || r.status);
+        st.textContent = '✓ Сохранено'; await loadTasks(); after && after();
+      } catch (err) { st.textContent = 'Не сохранено: ' + err.message; save.disabled = false; }
+    };
+  }).catch(err => { f.textContent = 'Не удалось загрузить списки: ' + err.message; });
+  return f;
+}
 async function newTaskForm() {
   const box = $('#newTask');
   if (!box.hidden) { box.hidden = true; box.textContent = ''; return; }
   box.hidden = false; box.textContent = 'Загружаю справочники Pyrus…';
   try {
-    if (!META) { const r = await fetch('/api/meta'); const d = await r.json(); if (!r.ok) throw new Error(d.error || r.status); META = d; }
+    await loadMeta();
   } catch (e) { box.textContent = 'Не удалось загрузить справочники: ' + e.message; return; }
   box.textContent = '';
   const f = el('form','newtask');
@@ -669,8 +733,7 @@ function renderClean() {
   const rows = flagged.filter(x => !cleanKey || x.why.some(r => r.k===cleanKey)).sort((a,b) => b.t.idle - a.t.idle);
   (cleanAll ? rows : rows.slice(0, CLEAN_SHOWN)).forEach(({t, why}) => {
     const li = el('li','task');
-    const a = el('a','t',t.t); a.href = t.url; a.target = '_blank'; a.rel = 'noopener'; a.title = 'Открыть задачу в Pyrus'; a.style.color = 'inherit'; a.style.textDecoration = 'none';
-    li.append(a);
+    li.append(taskTitle(t));
     const r = el('div','r'); r.append(el('span', 'badge '+(t.idle>=STALE_DAYS?'b-crit':'b-warn'), 'без движения '+t.idle+' дн.')); li.append(r);
     const m = el('div','m');
     m.append(el('span', t.kp?'':'tone-warn', t.kp ? 'КП '+t.kp : 'нет номера КП'), el('span','',t.who));
@@ -692,7 +755,9 @@ function renderClean() {
         TASKS = TASKS.filter(x => x.id !== t.id); renderTasks(); renderClean(); renderRecon(); loadTasks();
       } catch (err) { st.textContent = 'Не закрыто: ' + err.message; cb.disabled = false; }
     };
-    act.append(why2, st, cb); li.append(act); ul.append(li);
+    const lb = el('button','reply-btn','Списки'); lb.type = 'button';
+    lb.onclick = () => { const f = li.querySelector('.reply'); if (f) { f.remove(); return; } li.append(listsForm(t, li)); };
+    act.append(why2, st, lb, cb); li.append(act); ul.append(li);
   });
   if (!rows.length) ul.append(el('li','task','Здесь пусто — всё в порядке.'));
   else if (rows.length > CLEAN_SHOWN) {
