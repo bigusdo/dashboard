@@ -108,6 +108,13 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .tf-chip[aria-pressed="true"] b, .tf-chip[aria-pressed="true"] small { color: inherit; }
 .tf-sel select { border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; background: var(--surface); color: var(--text); font: inherit; font-size: 12.5px; }
 .tf-reset { background: none; border: 0; padding: 0; color: var(--text); text-decoration: underline; cursor: pointer; font: inherit; font-size: 12.5px; }
+.recon { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 18px 24px; }
+.recon h3 { font-size: 13.5px; font-weight: 650; display: flex; gap: 8px; align-items: baseline; }
+.recon h3 .badge { font-weight: 700; }
+.recon .hint { color: var(--muted); font-size: 12px; margin: 2px 0 6px; }
+.recon .docs li > a, .recon .docs li > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.recon .docs li > b, .recon .docs li > span:last-child { white-space: nowrap; color: var(--muted); font-weight: 500; }
+.recon .ok { color: var(--good-t); font-size: 13px; padding: 6px 0; }
 .task .act { grid-column: 1 / -1; }
 .reply-btn { background: none; border: 0; padding: 0; color: var(--s1); font: inherit; font-size: 12.5px; cursor: pointer; }
 .reply-btn:hover { text-decoration: underline; }
@@ -336,6 +343,12 @@ table.kp .ell { max-width: 230px; overflow: hidden; text-overflow: ellipsis; whi
       <div class="kp-more"><button class="fchip" id="kpMore" hidden></button></div>
     </section>
 
+    <!-- сверка Pyrus и 1С -->
+    <section class="card span-12" aria-labelledby="h-recon">
+      <div class="card-h"><h2 id="h-recon">Сверка Pyrus и 1С</h2><span class="sub" id="reconSub"></span></div>
+      <div class="recon" id="reconBody"></div>
+    </section>
+
     <!-- выручка -->
     <section class="card span-7" aria-labelledby="h-rev">
       <div class="card-h">
@@ -558,11 +571,47 @@ function replyForm(t, li) {
   setTimeout(() => ta.focus());
   return f;
 }
+/* ===== сверка Pyrus и 1С ============================================== */
+/* Что видно из сопоставления номеров КП: КП в работе по 1С без задачи, задачи без заказа в 1С или без номера, задачи, которые пора закрыть. */
+const RECON_SHOWN = 6;
+let reconOpen = {};
+function renderRecon() {
+  const box = $('#reconBody'); if (!box) return; box.textContent = '';
+  if (!KP.length || TASKS_STATE !== 'ok') { $('#reconSub').textContent = ''; box.append(el('div','foot','Сверка появится, когда загрузятся данные 1С и Pyrus.')); return; }
+  const taskKps = new Set(TASKS.map(t => t.kp).filter(Boolean)), kpIds = new Set(KP.map(k => k.id));
+  const LATE = ['КП согласовано. Заключаем договор!','В работе','Ждем денег!'];
+  const kpLink = k => { const a = el('a','kp-link','КП '+k.id+' · '+k.client); a.title = k.client+' · '+k.obj; a.onclick = () => openKp(k.id); a.tabIndex = 0; a.onkeydown = e => { if(e.key==='Enter') openKp(k.id); }; return a; };
+  const taskLink = t => { const a = el('a','',t.t); a.href = t.url; a.target = '_blank'; a.rel = 'noopener'; a.style.color = 'inherit'; a.title = t.t; return a; };
+  const groups = [
+    {key:'a', title:'КП в 1С без задачи в Pyrus', hint:'Идут по 1С (заказ есть, не выполнен и не оплачен), а открытой задачи с этим номером нет.',
+     rows: KP.filter(k => !taskKps.has(k.id)).sort((a,b)=>b.sum-a.sum), row: k => [kpLink(k), el('span','',mlnOrK(k.sum))]},
+    {key:'b', title:'Задача есть, КП в 1С не в работе', hint:'Статус «согласовано», «в работе» или «ждем денег», а в 1С КП уже выполнено и оплачено либо заказа нет. Проверьте статус задачи.',
+     rows: TASKS.filter(t => t.kp && !kpIds.has(t.kp) && t.status.some(x => LATE.includes(x))), row: t => [taskLink(t), el('span','','КП '+t.kp)]},
+    {key:'c', title:'Задача без номера КП', hint:'Номер КП в заголовке не найден (кроме будущих задач по ТО).',
+     rows: TASKS.filter(t => !t.kp), row: t => [taskLink(t), el('span','',t.who)]},
+    {key:'d', title:'Пора закрыть', hint:'Статус «Оплачено», либо «Выполнено» без «Ждем денег», а задача открыта.',
+     rows: TASKS.filter(t => t.status.includes('Оплачено') || (t.status.includes('Выполнено') && !t.status.includes('Ждем денег!'))), row: t => [taskLink(t), el('span','',t.status.map(stShort).join(' · '))]},
+  ];
+  const total = groups.reduce((a,g) => a + g.rows.length, 0);
+  $('#reconSub').textContent = total ? 'расхождений: '+total : 'расхождений нет';
+  groups.forEach(g => {
+    const blk = el('div'); const h = el('h3','',g.title); h.append(el('span','badge '+(g.rows.length?'b-warn':'b-ok'), g.rows.length)); blk.append(h, el('div','hint',g.hint));
+    if (!g.rows.length) { blk.append(el('div','ok','✓ Расхождений нет')); box.append(blk); return; }
+    const ul = el('ul','docs');
+    (reconOpen[g.key] ? g.rows : g.rows.slice(0, RECON_SHOWN)).forEach(r => { const li = el('li'); li.append(...g.row(r)); ul.append(li); });
+    blk.append(ul);
+    if (g.rows.length > RECON_SHOWN) {
+      const b = el('button','tf-reset', reconOpen[g.key] ? 'Свернуть' : 'Показать все '+g.rows.length); b.type = 'button'; b.style.marginTop = '6px';
+      b.onclick = () => { reconOpen[g.key] = !reconOpen[g.key]; renderRecon(); }; blk.append(b);
+    }
+    box.append(blk);
+  });
+}
 function applyTasks(d) {
   TASKS = d.tasks.map(t => ({...t, dd: t.due ? dayDiff(t.due) : null, idle: Math.max(0, Math.round((TODAY - new Date(t.modified))/864e5))}));
   TASKS_STATE = 'ok';
   $('#freshPy').textContent = 'Pyrus · ' + new Date(d.updated).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
-  renderTasks();
+  renderTasks(); renderRecon();
   if (KP.length) renderKp();
 }
 
@@ -829,7 +878,7 @@ function applyOnec(d) {
   CONTRACTS = d.contracts; CONTRACTS_ACTIVE = d.contracts.length;
   const t = new Date(d.updated);
   $('#fresh1c').textContent = '1С · ' + t.toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
-  renderTiles(); renderDebt(); renderRev(); renderContracts(); renderKp(); renderTasks();
+  renderTiles(); renderDebt(); renderRev(); renderContracts(); renderKp(); renderTasks(); renderRecon();
 }
 renderTasks(); renderKp();
 async function loadTasks() {
