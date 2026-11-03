@@ -59,6 +59,36 @@ export async function postComment(taskId, text, files = []) {
   return r.task?.comments?.at(-1)?.id ?? null;
 }
 
+// Справочники для формы новой задачи: люди и списки (метки). Список «ОП» скрыт, как и на дашборде.
+export async function meta() {
+  const [m, l] = await Promise.all([api('members'), api('lists')]);
+  const members = (m.members || []).filter(p => !p.banned && !p.removed_from_org)
+    .map(p => ({ id: p.id, name: [p.last_name, p.first_name].filter(Boolean).join(' ') || p.email || String(p.id), bot: p.type === 'bot' }))
+    .sort((a, b) => a.bot - b.bot || a.name.localeCompare(b.name, 'ru'));
+  const kind = n => STATUS_LISTS.has(n) ? 'status' : TYPE_LISTS.has(n) ? 'type' : 'obj';
+  const lists = (l.lists || []).filter(x => !HIDDEN_LISTS.has(x.name)).map(x => ({ id: x.id, name: x.name, kind: kind(x.name) }));
+  return { members, lists };
+}
+
+// Новая задача. { subject, text, responsible (id), due (YYYY-MM-DD), list_ids, files:[{name,data}] } → id задачи.
+export async function createTask({ subject, text, responsible, due, list_ids = [], files = [] }) {
+  const attachments = [];
+  for (const f of files) {
+    const form = new FormData();
+    form.append('file', new Blob([f.data]), f.name);
+    const up = await api('files/upload', { form });
+    if (!up.guid) throw new Error('Pyrus не принял файл ' + f.name);
+    attachments.push({ guid: up.guid });
+  }
+  const body = { subject, text: text || subject };
+  if (responsible) body.responsible = { id: responsible };
+  if (due) body.due_date = due;
+  if (list_ids.length) body.list_ids = list_ids;
+  if (attachments.length) body.attachments = attachments;
+  const r = await api('tasks', { json: body });
+  return r.task.id;
+}
+
 // Закрытие задачи (комментарий с действием «finished»); необратимо только в смысле уведомлений — в Pyrus задачу можно открыть заново.
 export const closeTask = (taskId, text) => api(`tasks/${taskId}/comments`, { json: { text, action: 'finished' } });
 

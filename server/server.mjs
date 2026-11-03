@@ -4,7 +4,7 @@
 import { createServer } from 'node:http';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { collect } from './collect.mjs';
-import { openTasks, postComment, closeTask } from './pyrus.mjs';
+import { openTasks, postComment, closeTask, meta, createTask } from './pyrus.mjs';
 
 const PORT = Number(process.env.PORT || 3000);
 const REFRESH_MS = Number(process.env.REFRESH_MIN || 30) * 60_000;
@@ -30,6 +30,8 @@ async function refresh() {
 
 // Задачи Pyrus обновляются отдельно и чаще: они собираются быстро и не ждут медленную 1С.
 const TASKS_MS = Number(process.env.PYRUS_REFRESH_MIN || 3) * 60_000;
+let metaCache = null; // люди и списки для формы новой задачи
+setInterval(() => { metaCache = null; }, 30 * 60_000);
 let tasks = null, tasksError = null, tasksAt = null, tasksBusy = false;
 
 async function refreshTasks() {
@@ -71,6 +73,32 @@ createServer(async (req, res) => {
   if (path === '/api/data') {
     if (data) return send(res, 200, data);
     return send(res, lastError ? 502 : 503, { error: lastError || 'Данные 1С ещё загружаются, обновите страницу через минуту' });
+  }
+  if (path === '/api/meta') {
+    try { metaCache ||= await meta(); return send(res, 200, metaCache); }
+    catch (e) { return send(res, 502, { error: e.message.split('\n')[0] }); }
+  }
+  if (path === '/api/tasks' && req.method === 'POST') {
+    const origin = req.headers.origin;
+    if (origin !== `http://localhost:${PORT}` && origin !== `http://127.0.0.1:${PORT}`) return send(res, 403, { error: 'Запрос не со страницы дашборда' });
+    if (!/^application\/json/.test(req.headers['content-type'] || '')) return send(res, 415, { error: 'Нужен JSON' });
+    try {
+      const b = JSON.parse(await readBody(req));
+      const subject = String(b.subject || '').trim().slice(0, 300);
+      if (!subject) return send(res, 400, { error: 'Нужен заголовок задачи' });
+      const due = /^\d{4}-\d{2}-\d{2}$/.test(b.due) ? b.due : null;
+      const responsible = Number(b.responsible) || null;
+      const list_ids = (Array.isArray(b.list_ids) ? b.list_ids : []).map(Number).filter(Boolean);
+      const known = new Set((metaCache ||= await meta()).lists.map(l => l.id));
+      if (list_ids.some(i => !known.has(i))) return send(res, 400, { error: 'Неизвестный список' });
+      const files = (Array.isArray(b.files) ? b.files : []).slice(0, 10).map(f => ({
+        name: String(f.name || 'file').replace(/[\\/:*?"<>|]/g, '_').slice(0, 120), data: Buffer.from(String(f.data || ''), 'base64'),
+      })).filter(f => f.data.length);
+      const id = await createTask({ subject, text: String(b.text || '').trim(), responsible, due, list_ids, files });
+      console.log(new Date().toLocaleTimeString('ru-RU'), 'создана задача', id, files.length ? `+ файлов: ${files.length}` : '');
+      refreshTasks();
+      return send(res, 200, { ok: true, id, url: 'https://pyrus.com/t#id' + id });
+    } catch (e) { return send(res, 502, { error: e.message.split('\n')[0] }); }
   }
   const mc = path.match(/^\/api\/tasks\/(\d+)\/close$/);
   if (mc && req.method === 'POST') {

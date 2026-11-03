@@ -108,6 +108,13 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .tf-chip[aria-pressed="true"] b, .tf-chip[aria-pressed="true"] small { color: inherit; }
 .tf-sel select { border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; background: var(--surface); color: var(--text); font: inherit; font-size: 12.5px; }
 .tf-reset { background: none; border: 0; padding: 0; color: var(--text); text-decoration: underline; cursor: pointer; font: inherit; font-size: 12.5px; }
+.newtask { display: grid; gap: 10px; padding: 12px; margin-bottom: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.nt-row { display: grid; grid-template-columns: 110px 1fr; gap: 8px; align-items: start; font-size: 13px; }
+.nt-row > span, .nt-group > span { color: var(--muted); font-size: 12.5px; padding-top: 5px; }
+.newtask input[type=text], .newtask input[type=date], .newtask textarea, .newtask select { border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; min-width: 0; width: 100%; box-sizing: border-box; }
+.nt-group { display: grid; grid-template-columns: 110px 1fr; gap: 8px; }
+.nt-checks { display: flex; flex-wrap: wrap; gap: 4px 14px; padding-top: 3px; }
+.nt-check { display: inline-flex; gap: 5px; align-items: center; font-size: 13px; cursor: pointer; }
 .recon { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 18px 24px; }
 .recon h3 { font-size: 13.5px; font-weight: 650; display: flex; gap: 8px; align-items: baseline; }
 .recon h3 .badge { font-weight: 700; }
@@ -296,8 +303,10 @@ table.kp .ell { max-width: 230px; overflow: hidden; text-overflow: ellipsis; whi
     <section class="card span-7" aria-labelledby="h-tasks">
       <div class="card-h">
         <h2 id="h-tasks">Задачи Pyrus</h2>
+        <button class="fchip" id="newTaskBtn" type="button" style="cursor:pointer">+ Новая задача</button>
         <div class="seg" role="tablist" id="taskTabs"></div>
       </div>
+      <div id="newTask" hidden></div>
       <div class="tfilters" id="taskFilters"></div>
       <ul class="tasks" id="taskList"></ul>
     </section>
@@ -578,6 +587,63 @@ function replyForm(t, li) {
   setTimeout(() => ta.focus());
   return f;
 }
+/* ===== новая задача ===================================================== */
+/* Создаётся в Pyrus от имени MainBot: ответственный, списки (метки), описание, срок и файлы выбираются здесь. */
+let META = null;
+const ME_PYRUS = 364657;
+async function newTaskForm() {
+  const box = $('#newTask');
+  if (!box.hidden) { box.hidden = true; box.textContent = ''; return; }
+  box.hidden = false; box.textContent = 'Загружаю справочники Pyrus…';
+  try {
+    if (!META) { const r = await fetch('/api/meta'); const d = await r.json(); if (!r.ok) throw new Error(d.error || r.status); META = d; }
+  } catch (e) { box.textContent = 'Не удалось загрузить справочники: ' + e.message; return; }
+  box.textContent = '';
+  const f = el('form','newtask');
+  const row = (label, node) => { const l = el('label','nt-row'); l.append(el('span','',label), node); return l; };
+  const subj = el('input'); subj.type = 'text'; subj.placeholder = 'Например: Замена АКБ Озерки / КП1091'; subj.maxLength = 300;
+  const text = el('textarea'); text.rows = 4; text.placeholder = 'Описание (необязательно)';
+  const resp = el('select'); const o0 = el('option','','— не назначен —'); o0.value = ''; resp.append(o0);
+  META.members.forEach(p => { const o = el('option','',p.name); o.value = p.id; resp.append(o); });
+  resp.value = META.members.some(p => p.id === ME_PYRUS) ? ME_PYRUS : '';
+  const due = el('input'); due.type = 'date';
+  const fi = el('input'); fi.type = 'file'; fi.multiple = true;
+  f.append(row('Заголовок', subj), row('Описание', text), row('Ответственный', resp), row('Срок', due));
+  const checks = [];
+  [['obj','Объект'], ['type','Тип работ'], ['status','Статус']].forEach(([k, title]) => {
+    const g = el('div','nt-group'); g.append(el('span','',title));
+    const w = el('div','nt-checks');
+    META.lists.filter(l => l.kind === k).sort((a, b) => k === 'status' ? STATUS_ORDER.indexOf(a.name) - STATUS_ORDER.indexOf(b.name) : 0).forEach(l => {
+      const c = el('input'); c.type = 'checkbox'; c.value = l.id; checks.push(c);
+      const lab = el('label','nt-check'); lab.append(c, el('span','',l.name)); w.append(lab);
+    });
+    g.append(w); f.append(g);
+  });
+  f.append(row('Файлы', fi));
+  const act = el('div','reply-row'); const send = el('button','reply-send','Создать задачу'); send.type = 'submit';
+  const cancel = el('button','tf-reset','Отмена'); cancel.type = 'button'; cancel.onclick = () => newTaskForm();
+  const st = el('span','reply-st'); act.append(send, cancel, st); f.append(act);
+  f.onsubmit = async e => {
+    e.preventDefault();
+    const files = [...fi.files], title = subj.value.trim();
+    if (!title) { st.textContent = 'Укажите заголовок'; return; }
+    if (files.reduce((a,x)=>a+x.size,0) > MAX_FILES_MB*1048576) { st.textContent = 'Файлы больше '+MAX_FILES_MB+' МБ'; return; }
+    if (!/КП\s*№?\s*\d{2,5}/i.test(title) && !confirm('В заголовке нет номера КП (КПxxxx). Создать задачу без него?')) return;
+    send.disabled = true; st.textContent = 'Создаю…';
+    try {
+      const body = JSON.stringify({subject: title, text: text.value.trim(), responsible: resp.value ? Number(resp.value) : null, due: due.value || null,
+        list_ids: checks.filter(c => c.checked).map(c => Number(c.value)),
+        files: await Promise.all(files.map(async x => ({name:x.name, data: await fileToB64(x)})))});
+      const r = await fetch('/api/tasks', {method:'POST', headers:{'Content-Type':'application/json'}, body});
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || r.status);
+      st.textContent = ''; const a = el('a','','✓ Создана — открыть в Pyrus'); a.href = d.url; a.target = '_blank'; a.rel = 'noopener'; st.append(a);
+      setTimeout(() => { box.hidden = true; box.textContent = ''; loadTasks(); }, 4000);
+    } catch (err) { st.textContent = 'Не создано: ' + err.message; send.disabled = false; }
+  };
+  box.append(f); subj.focus();
+}
+$('#newTaskBtn').onclick = newTaskForm;
 /* ===== уборка задач Pyrus ============================================== */
 /* Все открытые задачи, у которых есть причина для проверки; закрыть можно прямо отсюда (от имени MainBot, с пометкой «из дашборда»). */
 const STALE_DAYS = 90, CLEAN_SHOWN = 15;
