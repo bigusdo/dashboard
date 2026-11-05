@@ -300,7 +300,7 @@ table.kp .ell { max-width: 230px; overflow: hidden; text-overflow: ellipsis; whi
     <a class="card tile tile-link span-3" id="revLink" href="/revenue" title="Выручка по годам и контрагентам"><div class="lab"><span class="dot" style="background:var(--s1)"></span>Выручка с начала года<span class="go">→</span></div><div class="val" id="t-rev"></div><div class="note" id="t-rev-n"></div></a>
     <section class="card tile span-3"><div class="lab"><span class="dot" style="background:var(--s1)"></span>Дебиторка</div><div class="val" id="t-ar"></div><div class="note" id="t-ar-n"></div></section>
     <section class="card tile span-3"><div class="lab"><span class="dot" style="background:var(--s2)"></span>Кредиторка</div><div class="val" id="t-ap"></div><div class="note" id="t-ap-n"></div></section>
-    <section class="card tile span-3"><div class="lab">КП в работе</div><div class="val" id="t-ct"></div><div class="note" id="t-ct-n"></div></section>
+    <a class="card tile tile-link span-3" id="kpLink" href="/kp" title="КП в работе: заказчик, объект, договор, выполнение, закупки"><div class="lab">КП в работе<span class="go">→</span></div><div class="val" id="t-ct"></div><div class="note" id="t-ct-n"></div></a>
 
     <!-- задачи -->
     <section class="card span-7" aria-labelledby="h-tasks">
@@ -1060,7 +1060,7 @@ document.addEventListener('keydown', e => { if (e.key==='Escape' && drawer.class
 
 /* ===== тема ============================================================= */
 const root = document.documentElement;
-if (location.protocol === 'file:') $('#revLink').href = 'http://localhost:3000/revenue';
+if (location.protocol === 'file:') { $('#revLink').href = 'http://localhost:3000/revenue'; $('#kpLink').href = 'http://localhost:3000/kp'; }
 try { const s = localStorage.getItem('tkn-theme'); if (s) root.dataset.theme = s; } catch(e) {}
 $('#themeBtn').onclick = () => {
   const dark = root.dataset.theme ? root.dataset.theme==='dark' : matchMedia('(prefers-color-scheme: dark)').matches;

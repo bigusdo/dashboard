@@ -4,6 +4,8 @@
 import { createServer } from 'node:http';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { collect } from './collect.mjs';
+import { fetchSnapshot, loadSnapshot } from './fetch_data.mjs';
+import { mergeKp } from './kp_merge.mjs';
 import { openTasks, postComment, closeTask, meta, createTask, changeLists, renameTask } from './pyrus.mjs';
 
 const PORT = Number(process.env.PORT || 3000);
@@ -48,6 +50,17 @@ async function refreshTasks() {
   } finally { tasksBusy = false; }
 }
 
+// Отдел закупок (бот): снимок data/snapshot.json, не чаще раза в минуту (по умолчанию раз в 10 минут).
+const BOT_MS = Math.max(1, Number(process.env.BOT_REFRESH_MIN || 10)) * 60_000;
+let snapshot = await loadSnapshot(), botError = null;
+async function refreshBot() {
+  const r = await fetchSnapshot();
+  if (r.ok) { snapshot = r.snapshot; botError = null; console.log(new Date().toLocaleTimeString('ru-RU'), 'данные отдела закупок обновлены'); }
+  else if (!r.throttled) { botError = r.error; console.error(new Date().toLocaleTimeString('ru-RU'), 'отдел закупок:', r.error); }
+}
+refreshBot();
+setInterval(refreshBot, BOT_MS);
+
 try { data = JSON.parse(await readFile(CACHE, 'utf8')); } catch {}
 refresh();
 setInterval(refresh, REFRESH_MS);
@@ -73,6 +86,10 @@ createServer(async (req, res) => {
   if (path === '/api/data') {
     if (data) return send(res, 200, data);
     return send(res, lastError ? 502 : 503, { error: lastError || 'Данные 1С ещё загружаются, обновите страницу через минуту' });
+  }
+  if (path === '/api/kp') {
+    if (!data) return send(res, lastError ? 502 : 503, { error: lastError || 'Данные 1С ещё загружаются, обновите страницу через минуту' });
+    return send(res, 200, { updated: data.updated, today: data.today, botError, ...mergeKp(data.kp, snapshot) });
   }
   if (path === '/api/meta') {
     try { metaCache ||= await meta(); return send(res, 200, metaCache); }
@@ -177,6 +194,7 @@ createServer(async (req, res) => {
     if (tasks) return send(res, 200, { updated: tasksAt, tasks, error: tasksError });
     return send(res, tasksError ? 502 : 503, { error: tasksError || 'Задачи Pyrus ещё загружаются' });
   }
+  if (path === '/kp' || path === '/kp.html') return send(res, 200, await readFile(new URL('kp.html', PUBLIC)), 'text/html; charset=utf-8');
   if (path === '/revenue' || path === '/revenue.html') return send(res, 200, await readFile(new URL('revenue.html', PUBLIC)), 'text/html; charset=utf-8');
   if (path === '/' || path === '/index.html') return send(res, 200, await readFile(new URL('index.html', PUBLIC)), 'text/html; charset=utf-8');
   send(res, 404, { error: 'not found' });

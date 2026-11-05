@@ -1,0 +1,5 @@
+# секреты и сгенерированные данные (см. CLAUDE.md)
+.env
+data/
+server/out/
+node_modules/

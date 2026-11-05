@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>КП в работе — Дашборд ТКН</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f3f3f1; --surface: #fcfcfb; --line: #e4e3de; --line-soft: #efeeea;
+  --text: #0b0b0b; --text-2: #52514e; --muted: #74736d; --gray: #a8a79f;
+  --shadow: 0 1px 2px rgba(0,0,0,.05);
+  --ok: #1a8a5f; --warn: #b8741a; --bad: #c0392b; --blue: #2a78d6; --track: #e8e7e2;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --bg: #121211; --surface: #1a1a19; --line: #302f2c; --line-soft: #262624; --text: #f0efec; --text-2: #c3c2b7; --muted: #9a998f; --gray: #6f6e66; --shadow: none;
+    --ok: #34c08a; --warn: #e0a13a; --bad: #ef6a5b; --blue: #3987e5; --track: #302f2c;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121211; --surface: #1a1a19; --line: #302f2c; --line-soft: #262624; --text: #f0efec; --text-2: #c3c2b7; --muted: #9a998f; --gray: #6f6e66; --shadow: none;
+  --ok: #34c08a; --warn: #e0a13a; --bad: #ef6a5b; --blue: #3987e5; --track: #302f2c;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-variant-numeric: tabular-nums; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 0 16px 48px; }
+.top { display: flex; align-items: center; gap: 12px; padding: 18px 0 14px; flex-wrap: wrap; }
+.back { color: var(--text-2); text-decoration: none; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 5px 10px; font-size: 13px; }
+.back:hover { color: var(--text); }
+.brand { font-size: 18px; font-weight: 650; }
+.spacer { flex: 1; }
+.icon-btn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 5px 10px; font-size: 13px; color: var(--text-2); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; box-shadow: var(--shadow); margin-bottom: 14px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; box-shadow: var(--shadow); }
+.stat .l { color: var(--muted); font-size: 12.5px; }
+.stat .v { font-size: 22px; font-weight: 650; margin-top: 2px; }
+.stat .s { color: var(--muted); font-size: 12.5px; }
+.src { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--muted); font-size: 12.5px; margin-bottom: 12px; }
+.src b { color: var(--text-2); font-weight: 600; }
+.banner { border: 1px solid var(--warn); color: var(--warn); border-radius: 10px; padding: 8px 12px; margin-bottom: 12px; font-size: 13px; }
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; min-width: 980px; }
+th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12.5px; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover { color: var(--text); }
+td { padding: 8px; border-top: 1px solid var(--line-soft); vertical-align: top; }
+th.num, td.num { text-align: right; white-space: nowrap; }
+tr.kp-row { cursor: pointer; }
+tr.kp-row:hover td { background: var(--line-soft); }
+tr.kp-row td.id { font-weight: 650; white-space: nowrap; }
+.chev { display: inline-block; width: 14px; color: var(--muted); transition: transform .12s; }
+tr.open .chev { transform: rotate(90deg); }
+.sm { color: var(--muted); font-size: 12px; }
+.bar { height: 5px; border-radius: 3px; background: var(--track); margin-top: 4px; overflow: hidden; min-width: 90px; }
+.bar i { display: block; height: 100%; background: var(--blue); }
+.bar.pay i { background: var(--ok); }
+.tone-warn { color: var(--warn); } .tone-bad { color: var(--bad); } .tone-ok { color: var(--ok); }
+tr.detail > td { background: var(--bg); padding: 12px 14px 16px; }
+.dgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.dgrid h4 { font-size: 12.5px; font-weight: 600; color: var(--text-2); margin-bottom: 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 2px 10px; font-size: 12.5px; }
+.kvl { display: grid; grid-template-columns: 1fr auto; gap: 2px 14px; font-size: 13px; }
+.kvl span:nth-child(odd) { color: var(--text-2); }
+.kvl span:nth-child(even) { text-align: right; white-space: nowrap; }
+table.inv { min-width: 0; margin-top: 4px; }
+table.inv th, table.inv td { padding: 4px 8px; font-size: 12.5px; }
+.tag { display: inline-block; border-radius: 6px; padding: 0 6px; font-size: 11.5px; border: 1px solid var(--line); background: var(--surface); }
+.tag.ok { color: var(--ok); border-color: var(--ok); } .tag.warn { color: var(--warn); border-color: var(--warn); } .tag.bad { color: var(--bad); border-color: var(--bad); }
+.note { margin-top: 10px; color: var(--muted); font-size: 12.5px; }
+.msg { text-align: center; color: var(--muted); padding: 30px 0; }
+ul.plain { list-style: none; font-size: 13px; }
+ul.plain li { padding: 2px 0; }
+@media (max-width: 600px) { .wrap { padding: 0 12px 40px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="back" id="back" href="/">← Дашборд</a>
+    <div class="brand">КП в работе</div>
+    <div class="spacer"></div>
+    <button class="icon-btn" id="themeBtn" aria-label="Переключить тему">Тема</button>
+  </header>
+
+  <div id="banner"></div>
+  <div class="stats" id="stats"></div>
+
+  <section class="card">
+    <div class="src" id="src"></div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th></th>
+          <th class="sortable" data-s="id">КП</th>
+          <th class="sortable" data-s="client">Заказчик</th>
+          <th class="sortable" data-s="obj">Объект</th>
+          <th class="sortable num" data-s="sum">Сумма договора</th>
+          <th class="sortable" data-s="done">Выполнено</th>
+          <th class="sortable" data-s="paid">Оплачено клиентом</th>
+          <th class="sortable" data-s="buy">Закупки (бот)</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div class="note" id="foot"></div>
+  </section>
+</div>
+<script>
+const $ = s => document.querySelector(s);
+const root = document.documentElement;
+const nf = (v, d = 0) => v.toLocaleString('ru-RU', { maximumFractionDigits: d });
+const rub = v => nf(v) + ' ₽';
+const mln = v => nf(v / 1e6, 2) + ' млн ₽';
+const pct = v => Math.round(v * 100) + '%';
+const clamp = v => Math.max(0, Math.min(1, v));
+// текст из бота и 1С вставляется только как текст (textContent), чтобы данные от людей не могли стать разметкой
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+const stageName = s => String(s || '—').replace(/_/g, ' ');
+const dt = iso => iso ? new Date(iso).toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' }) : '—';
+
+try { const s = localStorage.getItem('tkn-theme'); if (s) root.dataset.theme = s; } catch (e) {}
+$('#themeBtn').onclick = () => {
+  const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  root.dataset.theme = dark ? 'light' : 'dark';
+  try { localStorage.setItem('tkn-theme', root.dataset.theme); } catch (e) {}
+};
+const BASE = location.protocol === 'file:' ? 'http://localhost:3000' : '';
+if (location.protocol === 'file:') $('#back').href = BASE + '/';
+
+let D = null, sortKey = 'sum', sortDir = -1;
+const open = new Set();
+
+const SORT = {
+  id: r => Number((r.id.match(/\d+/) || [0])[0]), client: r => r.client, obj: r => r.obj, sum: r => r.sum,
+  done: r => r.done / (r.sum || 1), paid: r => r.paid / (r.sum || 1), buy: r => r.bot.invoices_total,
+};
+
+function bar(v, cls) { const b = el('div', 'bar ' + (cls || '')); const i = el('i'); i.style.width = (clamp(v) * 100).toFixed(0) + '%'; b.append(i); return b; }
+
+function stats() {
+  const rows = D.rows, s = $('#stats'); s.replaceChildren();
+  const sum = f => rows.reduce((a, r) => a + f(r), 0);
+  const issues = sum(r => r.bot.problems.length), notIn = sum(r => r.bot.not_in_onec), inv = sum(r => r.bot.invoices_total);
+  const items = [
+    ['КП в работе', String(rows.length), 'сумма договоров ' + mln(sum(r => r.sum))],
+    ['Выполнено', mln(sum(r => r.done)), pct(sum(r => r.done) / (sum(r => r.sum) || 1)) + ' суммы'],
+    ['Оплачено клиентами', mln(sum(r => r.paid)), 'не оплачено выполненного: ' + mln(Math.max(0, sum(r => Math.max(0, r.done - r.paid))))],
+    ['Счета в закупках (бот)', D.generated_at ? String(inv) : '—', D.generated_at ? 'ещё не в 1С: ' + notIn : 'нет данных бота'],
+    ['Проблемные счета', D.generated_at ? String(issues) : '—', 'эскалации, затянутая доставка, долго на согласовании'],
+  ];
+  for (const [l, v, sub] of items) { const d = el('div', 'stat'); d.append(el('div', 'l', l), el('div', 'v', v), el('div', 's', sub)); s.append(d); }
+}
+
+function detail(r) {
+  const tr = el('tr', 'detail'); const td = el('td'); td.colSpan = 8; tr.append(td);
+  const g = el('div', 'dgrid'); td.append(g);
+  const b = r.bot;
+
+  const s1 = el('div'); s1.append(el('h4', '', 'Деньги (1С, с НДС)'));
+  const kv = el('div', 'kvl');
+  [['Сумма договора (заказы)', rub(r.sum)], ['Выполнено актами', rub(r.done) + ' · ' + pct(r.done / (r.sum || 1))], ['Осталось выполнить', rub(Math.max(0, r.sum - r.done))],
+   ['Оплачено клиентом', rub(r.paid) + ' · ' + pct(r.paid / (r.sum || 1))],
+   [r.done > r.paid ? 'Клиент должен по выполненному' : 'Аванс (оплачено вперёд)', rub(Math.abs(r.done - r.paid))],
+   ['Подрядчикам оплачено', rub(r.sub)], ['Материалы по документам 1С', rub(r.mat)]].forEach(([a, c]) => kv.append(el('span', '', a), el('span', '', c)));
+  s1.append(kv); g.append(s1);
+
+  const s2 = el('div'); s2.append(el('h4', '', 'Закупки материалов (бот «Отдел закупок»)'));
+  if (!b.found) s2.append(el('div', 'sm', D.generated_at ? 'В боте этой КП нет.' : 'Данных бота нет.'));
+  else {
+    const kv2 = el('div', 'kvl');
+    const money = v => v == null ? '—' : rub(v);
+    [['План материалов', money(b.plan_materials)], ['План доставки', money(b.plan_delivery)],
+     ['Факт материалов (закрытые заявки)', money(b.fact_materials)], ['Факт доставки (закрытые заявки)', money(b.fact_delivery)],
+     ['Заявок: открыто / закрыто', b.requests_open + ' / ' + b.requests_closed],
+     ['Счетов найдено в 1С', (b.invoices_total - b.not_in_onec) + ' из ' + b.invoices_total],
+     ['…сумма в 1С / оплачено', rub(b.in_onec_sum) + ' / ' + rub(b.in_onec_paid)]].forEach(([a, c]) => kv2.append(el('span', '', a), el('span', '', c)));
+    s2.append(kv2);
+    const chips = el('div', 'chips'); chips.style.marginTop = '8px';
+    Object.entries(b.stages).forEach(([k, v]) => chips.append(el('span', 'chip', stageName(k) + ': ' + v)));
+    if (b.invoices_cancelled) chips.append(el('span', 'chip', 'отменено: ' + b.invoices_cancelled));
+    s2.append(chips);
+    s2.append(el('div', 'sm', 'Факт в боте считается только по закрытым заявкам, по открытым он занижен.'));
+  }
+  g.append(s2);
+
+  const s3 = el('div'); s3.append(el('h4', '', 'Подрядчики (1С)'));
+  if (r.subBy.length) { const kv3 = el('div', 'kvl'); r.subBy.forEach(x => kv3.append(el('span', '', x.name), el('span', '', rub(x.sum)))); s3.append(kv3); }
+  else s3.append(el('div', 'sm', 'Оплат подрядчикам нет.'));
+  g.append(s3);
+
+  if (b.problems.length) {
+    const p = el('div'); p.append(el('h4', 'tone-warn', 'Проблемные счета'));
+    const ul = el('ul', 'plain');
+    b.problems.forEach(x => ul.append(el('li', '', `заявка №${x.request_number}, счёт ${x.seq_number}` + (x.supplier_name ? ' · ' + x.supplier_name : '') + ' — ' + x.text)));
+    p.append(ul); g.append(p);
+  }
+
+  if (b.invoices.length) {
+    const w = el('div'); w.style.gridColumn = '1 / -1'; w.append(el('h4', '', 'Счета (бот) и их отражение в 1С'));
+    const t = el('table', 'inv'); const h = el('tr');
+    ['Заявка', 'Счёт', 'Поставщик', '№ счёта', 'Этап', 'Доставка', 'Сумма в 1С', 'Оплачено в 1С', 'В 1С'].forEach((x, i) => h.append(el('th', i >= 6 && i <= 7 ? 'num' : '', x)));
+    const th = el('thead'); th.append(h); t.append(th);
+    const tb = el('tbody');
+    b.invoices.forEach(i => {
+      const row = el('tr');
+      const dl = i.delivered_at ? 'доставлено ' + dt(i.delivered_at) : (i.delivery_date ? 'на ' + dt(i.delivery_date) : '—');
+      row.append(el('td', '', '№' + i.request_number), el('td', '', String(i.seq_number)), el('td', '', i.supplier || 'не указан'), el('td', '', i.number || '—'),
+        el('td', '', stageName(i.status)), el('td', '', dl),
+        el('td', 'num', i.onec ? rub(i.onec.sum) : '—'), el('td', 'num', i.onec ? rub(i.onec.paid) : '—'));
+      const c = el('td');
+      if (i.onec) c.append(el('span', 'tag ok', i.onec.byNumberOnly ? 'найден по номеру' : 'найден'));
+      else c.append(el('span', i.why === 'ещё не в 1С' ? 'tag warn' : 'tag', i.why));
+      row.append(c); tb.append(row);
+    });
+    t.append(tb); w.append(t); g.append(w);
+  }
+  return tr;
+}
+
+function render() {
+  const rows = D.rows.slice().sort((a, b) => {
+    const x = SORT[sortKey](a), y = SORT[sortKey](b);
+    return (typeof x === 'string' ? x.localeCompare(y, 'ru') : x - y) * sortDir;
+  });
+  const body = $('#rows'); body.replaceChildren();
+  document.querySelectorAll('th.sortable').forEach(t => { t.textContent = t.textContent.replace(/ [▲▼]$/, ''); if (t.dataset.s === sortKey) t.textContent += sortDir > 0 ? ' ▲' : ' ▼'; });
+  for (const r of rows) {
+    const tr = el('tr', 'kp-row' + (open.has(r.id) ? ' open' : '')); tr.tabIndex = 0;
+    const toggle = () => { open.has(r.id) ? open.delete(r.id) : open.add(r.id); render(); };
+    tr.onclick = toggle; tr.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } };
+    tr.append(el('td'), el('td', 'id', 'КП ' + r.id));
+    tr.firstChild.append(el('span', 'chev', '›'));
+    tr.append(el('td', '', r.client), el('td', '', r.obj), el('td', 'num', rub(r.sum)));
+    const done = el('td'); done.append(el('div', '', rub(r.done) + ' · ' + pct(r.done / (r.sum || 1))), bar(r.done / (r.sum || 1))); tr.append(done);
+    const paid = el('td'); paid.append(el('div', '', rub(r.paid) + ' · ' + pct(r.paid / (r.sum || 1))), bar(r.paid / (r.sum || 1), 'pay'));
+    if (r.done > r.paid + 1) paid.append(el('div', 'sm tone-warn', 'долг клиента ' + rub(r.done - r.paid)));
+    tr.append(paid);
+    const buy = el('td'), b = r.bot;
+    if (!D.generated_at) buy.append(el('span', 'sm', 'нет данных бота'));
+    else if (!b.found) buy.append(el('span', 'sm', 'КП нет в боте'));
+    else {
+      buy.append(el('div', '', 'счетов: ' + b.invoices_total + (b.not_in_onec ? ' · не в 1С: ' + b.not_in_onec : '')));
+      buy.append(el('div', 'sm', 'факт мат. (закрытые): ' + (b.fact_materials == null ? '—' : rub(b.fact_materials)) + (b.plan_materials != null ? ' из плана ' + rub(b.plan_materials) : '')));
+      if (b.problems.length) buy.append(el('div', 'sm tone-warn', 'проблем: ' + b.problems.length));
+    }
+    tr.append(buy); body.append(tr);
+    if (open.has(r.id)) body.append(detail(r));
+  }
+}
+
+document.querySelectorAll('th.sortable').forEach(t => t.onclick = () => {
+  if (sortKey === t.dataset.s) sortDir = -sortDir; else { sortKey = t.dataset.s; sortDir = t.dataset.s === 'id' || t.dataset.s === 'client' || t.dataset.s === 'obj' ? 1 : -1; }
+  render();
+});
+
+function sources() {
+  const s = $('#src'); s.replaceChildren();
+  const add = (l, v) => { const sp = el('span'); sp.append(l + ': ', el('b', '', v)); s.append(sp); };
+  add('1С обновлено', D.updated ? new Date(D.updated).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }) : '—');
+  add('Данные бота на', D.generated_at ? new Date(D.generated_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }) : 'нет снимка');
+  const ban = $('#banner'); ban.replaceChildren();
+  if (D.botError) { const b = el('div', 'banner', 'Отдел закупок: ' + D.botError + (D.generated_at ? '. Показан последний снимок.' : '.')); ban.append(b); }
+}
+
+(async function load() {
+  try {
+    let r; try { r = await fetch(BASE + '/api/kp'); } catch { throw new Error('сервер не запущен — запустите start.cmd'); }
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || r.status);
+    D = d; sources(); stats(); render();
+    $('#foot').textContent = 'Суммы с НДС. Деньги клиента и документы закупок — из 1С; этапы счетов, заявки и план — из бота «Отдел закупок». Счёт бота ищется в 1С по входящему номеру и поставщику в той же КП. Нажмите на строку, чтобы раскрыть подробности.'
+      + (d.botOnly?.length ? ' В боте есть открытые КП, которых нет среди КП в работе по 1С: ' + d.botOnly.map(x => x.kp_number).join(', ') + '.' : '');
+  } catch (e) {
+    $('#src').textContent = 'Не удалось получить данные: ' + e.message;
+  }
+})();
+</script>
+</body>
+</html>

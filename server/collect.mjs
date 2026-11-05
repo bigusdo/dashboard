@@ -114,7 +114,7 @@ async function dealCosts(names) {
   const nom = await get('Catalog_Номенклатура?$select=Ref_Key,ТипНоменклатуры');
   const isGoods = new Map(nom.value.map(n => [n.Ref_Key, n['ТипНоменклатуры'] === 'Товар']));
   const ZERO = '00000000-0000-0000-0000-000000000000';
-  const purchases = await get('Document_ПриобретениеТоваровУслуг?$select=Ref_Key,Сделка_Key,Контрагент_Key,Товары&$filter=' + enc('Posted eq true'));
+  const purchases = await get('Document_ПриобретениеТоваровУслуг?$select=Ref_Key,Date,Number,НомерВходящегоДокумента,СуммаДокумента,Сделка_Key,Контрагент_Key,Товары&$filter=' + enc('Posted eq true'));
 
   const paid = new Map();
   for (const doc of ['Document_СписаниеБезналичныхДенежныхСредств', 'Document_РасходныйКассовыйОрдер']) {
@@ -123,19 +123,27 @@ async function dealCosts(names) {
       paid.set(row.ОбъектРасчетов_Key, (paid.get(row.ОбъектРасчетов_Key) || 0) + row['Сумма']);
   }
 
-  const objTotal = new Map(), subLines = new Map(), res = new Map();
+  const objTotal = new Map(), subLines = new Map(), res = new Map(), docs = [];
   const add = (m, key, v) => m.set(key, (m.get(key) || 0) + v);
   for (const doc of purchases.value) {
     if (!doc.Сделка_Key || doc.Сделка_Key === ZERO) continue;
-    const c = res.get(doc.Сделка_Key) || { mat: 0, sub: 0, matBy: new Map(), subBy: new Map() };
+    const c = res.get(doc.Сделка_Key) || { mat: 0, sub: 0, matBy: new Map(), subBy: new Map(), docs: [] };
     res.set(doc.Сделка_Key, c);
     const cp = names.get(doc.Контрагент_Key) || '—';
+    const lines = [];
     for (const l of doc['Товары'] || []) {
       const v = l['СуммаСНДС'];
       add(objTotal, l.ОбъектРасчетов_Key, v);
+      lines.push({ obj: l.ОбъектРасчетов_Key, v });
       if (isGoods.get(l.Номенклатура_Key)) { c.mat += v; add(c.matBy, cp, v); }
       else add(subLines, doc.Сделка_Key + '|' + l.ОбъектРасчетов_Key + '|' + cp, v);
     }
+    docs.push({ c, lines, supplier: cp, num: doc['НомерВходящегоДокумента'] || '', date: (doc.Date || '').slice(0, 10), sum: doc['СуммаДокумента'] });
+  }
+  // документы закупки по сделке: поставщик, входящий номер, сумма и оплаченная часть (пропорционально объекту расчётов)
+  for (const d of docs) {
+    const p = d.lines.reduce((a, l) => a + l.v * Math.min(paid.get(l.obj) || 0, objTotal.get(l.obj) || 1) / (objTotal.get(l.obj) || 1), 0);
+    d.c.docs.push({ supplier: d.supplier, num: d.num, date: d.date, sum: num(d.sum), paid: num(Math.min(p, d.sum)) });
   }
   for (const [k, v] of subLines) {
     const [deal, obj, cp] = k.split('|');
@@ -210,6 +218,7 @@ async function kpInWork(names) {
       sum: num(p.sum), done: num(p.done), paid: num(Math.min(p.paid, p.sum)),
       sub: num(costs.get(d.Ref_Key)?.sub || 0), mat: num(costs.get(d.Ref_Key)?.mat || 0),
       subBy: byList(costs.get(d.Ref_Key)?.subBy), matBy: byList(costs.get(d.Ref_Key)?.matBy),
+      docs: costs.get(d.Ref_Key)?.docs || [],
     });
   }
   return res.sort((a, b) => b.sum - a.sum);
