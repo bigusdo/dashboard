@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Выручка по годам — Дашборд ТКН</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f3f3f1; --surface: #fcfcfb; --line: #e4e3de; --line-soft: #efeeea;
+  --text: #0b0b0b; --text-2: #52514e; --muted: #74736d; --gray: #a8a79f;
+  --shadow: 0 1px 2px rgba(0,0,0,.05);
+  --c0: #2a78d6; --c1: #eb6834; --c2: #1baf7a; --c3: #8a5fd1; --c4: #e0a21a; --c5: #d0457b; --c6: #17a2b8; --c7: #7a8a2e;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --bg: #121211; --surface: #1a1a19; --line: #302f2c; --line-soft: #262624; --text: #f0efec; --text-2: #c3c2b7; --muted: #9a998f; --gray: #6f6e66; --shadow: none;
+    --c0: #3987e5; --c1: #d95926; --c2: #199e70; --c3: #9a73e0; --c4: #d9a21f; --c5: #e0568c; --c6: #25b3c9; --c7: #93a53a;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121211; --surface: #1a1a19; --line: #302f2c; --line-soft: #262624; --text: #f0efec; --text-2: #c3c2b7; --muted: #9a998f; --gray: #6f6e66; --shadow: none;
+  --c0: #3987e5; --c1: #d95926; --c2: #199e70; --c3: #9a73e0; --c4: #d9a21f; --c5: #e0568c; --c6: #25b3c9; --c7: #93a53a;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-variant-numeric: tabular-nums; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+.wrap { max-width: 1000px; margin: 0 auto; padding: 0 16px 48px; }
+.top { display: flex; align-items: center; gap: 12px; padding: 18px 0 14px; }
+.back { color: var(--text-2); text-decoration: none; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 5px 10px; font-size: 13px; }
+.back:hover { color: var(--text); }
+.brand { font-size: 18px; font-weight: 650; }
+.spacer { flex: 1; }
+.icon-btn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 5px 10px; font-size: 13px; color: var(--text-2); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; box-shadow: var(--shadow); margin-bottom: 14px; }
+.nav { display: flex; align-items: center; justify-content: center; gap: 18px; margin-bottom: 8px; }
+.nav button { width: 38px; height: 38px; border: 1px solid var(--line); border-radius: 50%; font-size: 18px; color: var(--text-2); background: var(--surface); }
+.nav button:hover:not(:disabled) { color: var(--text); border-color: var(--text-2); }
+.nav button:disabled { opacity: .3; cursor: default; }
+.nav .yr { font-size: 26px; font-weight: 650; min-width: 90px; text-align: center; }
+.sub { text-align: center; color: var(--muted); font-size: 12.5px; }
+.pie-wrap { display: flex; justify-content: center; padding: 10px 0 4px; }
+svg.pie { width: min(100%, 360px); height: auto; overflow: visible; }
+.pie text { font: 600 12px system-ui, sans-serif; fill: #fff; pointer-events: none; }
+.pie .c1 { font-size: 11px; fill: var(--muted); font-weight: 500; }
+.pie .c2 { font-size: 17px; fill: var(--text); font-weight: 650; }
+.pie path { stroke: var(--surface); stroke-width: 2; }
+.pie path:hover { opacity: .85; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12.5px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+td { padding: 7px 8px; border-top: 1px solid var(--line-soft); }
+th.num, td.num { text-align: right; white-space: nowrap; }
+td.dot { width: 22px; padding-right: 0; }
+td.dot i { display: block; width: 10px; height: 10px; border-radius: 50%; }
+tr.total td { font-weight: 650; border-top: 1px solid var(--line); }
+tr.other td:nth-child(2) { color: var(--text-2); }
+.note { margin-top: 10px; color: var(--muted); font-size: 12.5px; }
+.msg { text-align: center; color: var(--muted); padding: 30px 0; }
+@media (max-width: 600px) { td, th { padding: 6px 4px; } .nav .yr { font-size: 22px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="back" id="back" href="/">← Дашборд</a>
+    <div class="brand">Выручка по годам</div>
+    <div class="spacer"></div>
+    <button class="icon-btn" id="themeBtn" aria-label="Переключить тему">Тема</button>
+  </header>
+
+  <section class="card">
+    <div class="nav">
+      <button id="prev" aria-label="Предыдущий год">←</button>
+      <div class="yr" id="yr">—</div>
+      <button id="next" aria-label="Следующий год">→</button>
+    </div>
+    <div class="sub" id="sub"></div>
+    <div class="pie-wrap"><svg class="pie" id="pie" viewBox="0 0 300 300" role="img" aria-label="Доли контрагентов в выручке"></svg></div>
+  </section>
+
+  <section class="card">
+    <table>
+      <thead><tr><th></th><th>Контрагент</th><th class="num">Выручка, без НДС</th><th class="num">Доля</th><th class="num">Отгрузок</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="note">Выручка — по проводкам счёта 90.01 (без НДС). Отгрузки — проведённые документы реализации и акты выполненных работ за год. Листать годы можно стрелками ← → на клавиатуре.</div>
+  </section>
+</div>
+<script>
+const $ = s => document.querySelector(s);
+const root = document.documentElement;
+const rub = v => Math.round(v).toLocaleString('ru-RU') + ' ₽';
+const pct = v => (v >= 10 ? v.toFixed(0) : v.toFixed(1)).replace('.', ',') + '%';
+const TOP = 8;
+let YEARS = {}, KEYS = [], idx = -1, TODAY = '';
+
+try { const s = localStorage.getItem('tkn-theme'); if (s) root.dataset.theme = s; } catch(e) {}
+$('#themeBtn').onclick = () => {
+  const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  root.dataset.theme = dark ? 'light' : 'dark';
+  try { localStorage.setItem('tkn-theme', root.dataset.theme); } catch(e) {}
+};
+if (location.protocol === 'file:') $('#back').href = 'http://localhost:3000/';
+
+const NS = 'http://www.w3.org/2000/svg';
+const svg = (n, a = {}, t) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); if (t != null) e.textContent = t; return e; };
+const cell = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+
+function render() {
+  const y = KEYS[idx], d = YEARS[y];
+  $('#yr').textContent = y;
+  $('#prev').disabled = idx <= 0; $('#next').disabled = idx >= KEYS.length - 1;
+  const last = idx === KEYS.length - 1;
+  $('#sub').textContent = (last && TODAY ? 'с 1 января по ' + new Date(TODAY).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : 'за год') + ' · отгрузок: ' + d.ships;
+  try { history.replaceState(null, '', '#' + y); } catch(e) {}
+
+  // доли считаем по положительной выручке (возвраты и корректировки с минусом в диаграмму не попадают)
+  const pos = d.clients.filter(c => c.sum > 0.5);
+  const base = pos.reduce((a, c) => a + c.sum, 0);
+  const top = pos.slice(0, TOP), rest = pos.slice(TOP);
+  const slices = top.map((c, i) => ({ name: c.name, sum: c.sum, color: `var(--c${i})` }));
+  const restSum = rest.reduce((a, c) => a + c.sum, 0);
+  if (restSum > 0) slices.push({ name: 'Остальные (' + rest.length + ')', sum: restSum, color: 'var(--gray)' });
+
+  const p = $('#pie'); p.replaceChildren();
+  if (!base) { p.append(svg('text', { x: 150, y: 150, 'text-anchor': 'middle', class: 'c1' }, 'нет выручки')); }
+  else {
+    const R = 140, r = 78, cx = 150, cy = 150;
+    let a0 = -Math.PI / 2;
+    const pt = (rad, ang) => [cx + rad * Math.cos(ang), cy + rad * Math.sin(ang)];
+    for (const s of slices) {
+      const frac = s.sum / base, a1 = a0 + frac * 2 * Math.PI - (frac > .9999 ? 1e-4 : 0);
+      const [x0, y0] = pt(R, a0), [x1, y1] = pt(R, a1), [x2, y2] = pt(r, a1), [x3, y3] = pt(r, a0);
+      const big = a1 - a0 > Math.PI ? 1 : 0;
+      const path = svg('path', { d: `M${x0},${y0} A${R},${R} 0 ${big} 1 ${x1},${y1} L${x2},${y2} A${r},${r} 0 ${big} 0 ${x3},${y3} Z`, fill: s.color });
+      path.append(svg('title', {}, `${s.name}: ${rub(s.sum)} (${pct(frac * 100)})`));
+      p.append(path);
+      if (frac >= 0.04) { const [tx, ty] = pt((R + r) / 2, (a0 + a1) / 2); p.append(svg('text', { x: tx, y: ty, 'text-anchor': 'middle', 'dominant-baseline': 'central' }, pct(frac * 100))); }
+      a0 = a1;
+    }
+    p.append(svg('text', { x: cx, y: cy - 8, 'text-anchor': 'middle', class: 'c1' }, 'Выручка ' + y));
+    p.append(svg('text', { x: cx, y: cy + 14, 'text-anchor': 'middle', class: 'c2' }, (d.total / 1e6).toFixed(1).replace('.', ',') + ' млн ₽'));
+  }
+
+  const rows = $('#rows'); rows.replaceChildren();
+  d.clients.forEach(c => {
+    const i = top.findIndex(t => t.name === c.name && t.sum === c.sum);
+    const tr = document.createElement('tr');
+    const dotTd = cell('td', 'dot'); const dot = document.createElement('i');
+    dot.style.background = c.sum > 0.5 ? (i >= 0 ? `var(--c${i})` : 'var(--gray)') : 'transparent';
+    dotTd.append(dot);
+    tr.append(dotTd, cell('td', '', c.name), cell('td', 'num', rub(c.sum)), cell('td', 'num', c.sum > 0.5 && base ? pct(c.sum / base * 100) : '—'), cell('td', 'num', String(c.ships)));
+    rows.append(tr);
+  });
+  const tot = document.createElement('tr'); tot.className = 'total';
+  tot.append(cell('td'), cell('td', '', 'Итого'), cell('td', 'num', rub(d.total)), cell('td', 'num', ''), cell('td', 'num', String(d.ships)));
+  rows.append(tot);
+}
+
+function go(delta) { const n = idx + delta; if (n >= 0 && n < KEYS.length) { idx = n; render(); } }
+$('#prev').onclick = () => go(-1); $('#next').onclick = () => go(1);
+document.addEventListener('keydown', e => { if (e.key === 'ArrowLeft') go(-1); else if (e.key === 'ArrowRight') go(1); });
+// свайп на телефоне
+let sx = null;
+document.addEventListener('touchstart', e => { sx = e.touches[0].clientX; }, { passive: true });
+document.addEventListener('touchend', e => { if (sx == null) return; const dx = e.changedTouches[0].clientX - sx; sx = null; if (Math.abs(dx) > 60) go(dx > 0 ? -1 : 1); });
+
+(async function load() {
+  try {
+    const api = location.protocol === 'file:' ? 'http://localhost:3000/api/data' : '/api/data';
+    let r; try { r = await fetch(api); } catch { throw new Error('сервер не запущен — запустите start.cmd'); }
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || r.status);
+    if (!d.revenueYears) throw new Error('данные по годам ещё собираются — обновите страницу через пару минут');
+    YEARS = d.revenueYears; TODAY = d.today;
+    KEYS = Object.keys(YEARS).sort();
+    const want = KEYS.indexOf(location.hash.slice(1));
+    idx = want >= 0 ? want : KEYS.length - 1;
+    render();
+  } catch (e) {
+    $('#sub').textContent = 'Не удалось получить данные: ' + e.message;
+  }
+})();
+</script>
+</body>
+</html>

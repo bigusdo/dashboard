@@ -82,6 +82,9 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .tile .val { font-size: 28px; font-weight: 650; letter-spacing: -.02em; margin-top: 4px; }
 .tile .val small { font-size: 15px; font-weight: 500; color: var(--text-2); margin-left: 3px; }
 .tile .note { margin-top: 2px; color: var(--muted); font-size: 12.5px; }
+.tile-link { display: block; color: inherit; text-decoration: none; }
+.tile-link:hover { border-color: var(--s1); }
+.tile-link .go { margin-left: auto; color: var(--muted); }
 .up { color: var(--good-t); font-weight: 600; }
 .tone-warn { color: var(--warn-t); font-weight: 600; }
 
@@ -294,7 +297,7 @@ table.kp .ell { max-width: 230px; overflow: hidden; text-overflow: ellipsis; whi
   <main class="grid">
 
     <!-- плитки -->
-    <section class="card tile span-3"><div class="lab"><span class="dot" style="background:var(--s1)"></span>Выручка с начала года</div><div class="val" id="t-rev"></div><div class="note" id="t-rev-n"></div></section>
+    <a class="card tile tile-link span-3" id="revLink" href="/revenue" title="Выручка по годам и контрагентам"><div class="lab"><span class="dot" style="background:var(--s1)"></span>Выручка с начала года<span class="go">→</span></div><div class="val" id="t-rev"></div><div class="note" id="t-rev-n"></div></a>
     <section class="card tile span-3"><div class="lab"><span class="dot" style="background:var(--s1)"></span>Дебиторка</div><div class="val" id="t-ar"></div><div class="note" id="t-ar-n"></div></section>
     <section class="card tile span-3"><div class="lab"><span class="dot" style="background:var(--s2)"></span>Кредиторка</div><div class="val" id="t-ap"></div><div class="note" id="t-ap-n"></div></section>
     <section class="card tile span-3"><div class="lab">КП в работе</div><div class="val" id="t-ct"></div><div class="note" id="t-ct-n"></div></section>
@@ -1057,6 +1060,7 @@ document.addEventListener('keydown', e => { if (e.key==='Escape' && drawer.class
 
 /* ===== тема ============================================================= */
 const root = document.documentElement;
+if (location.protocol === 'file:') $('#revLink').href = 'http://localhost:3000/revenue';
 try { const s = localStorage.getItem('tkn-theme'); if (s) root.dataset.theme = s; } catch(e) {}
 $('#themeBtn').onclick = () => {
   const dark = root.dataset.theme ? root.dataset.theme==='dark' : matchMedia('(prefers-color-scheme: dark)').matches;

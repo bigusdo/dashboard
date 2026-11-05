@@ -177,6 +177,7 @@ createServer(async (req, res) => {
     if (tasks) return send(res, 200, { updated: tasksAt, tasks, error: tasksError });
     return send(res, tasksError ? 502 : 503, { error: tasksError || 'Задачи Pyrus ещё загружаются' });
   }
+  if (path === '/revenue' || path === '/revenue.html') return send(res, 200, await readFile(new URL('revenue.html', PUBLIC)), 'text/html; charset=utf-8');
   if (path === '/' || path === '/index.html') return send(res, 200, await readFile(new URL('index.html', PUBLIC)), 'text/html; charset=utf-8');
   send(res, 404, { error: 'not found' });
 }).listen(PORT, '127.0.0.1', () => console.log(`Дашборд: http://localhost:${PORT}`));

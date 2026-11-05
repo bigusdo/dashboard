@@ -32,6 +32,38 @@ async function revenueByMonth(acc, year, today) {
   return rev;
 }
 
+// Выручка по годам в разрезе контрагентов (та же формула, что по месяцам: Кт − Дт по 90.01 без закрытия месяца).
+// Контрагент — первое субконто корреспондирующего счёта (62 и т.п.). Отгрузки — проведённые реализации и акты
+// выполненных работ, количество документов по контрагентам за год.
+const FIRST_YEAR = 2020;
+async function revenueByYearClient(acc, names, year, today) {
+  const years = {};
+  const ensure = (y, k) => ((years[y] ||= new Map()).get(k) || years[y].set(k, { sum: 0, ships: 0 }).get(k));
+  for (let y = FIRST_YEAR; y <= year; y++) {
+    const end = y === year ? today : new Date(Date.UTC(y, 11, 31));
+    const t = await get(`AccountingRegister_Хозрасчетный/Turnovers(StartPeriod=${dt(new Date(Date.UTC(y, 0, 1)))},EndPeriod=${dt(end, true)})`);
+    for (const x of t.value) {
+      if (!acc[x.Account_Key]?.startsWith('90.01')) continue;
+      const corr = acc[x.BalancedAccount_Key] || '';
+      if (corr.startsWith('90.') || corr.startsWith('99')) continue;
+      const k = x.BalancedExtDimension1_Type === 'StandardODATA.Catalog_Контрагенты' ? x.BalancedExtDimension1 : '';
+      ensure(y, k).sum += x['СуммаTurnoverCr'] - x['СуммаTurnoverDr'];
+    }
+  }
+  for (const doc of ['Document_РеализацияТоваровУслуг', 'Document_АктВыполненныхРабот']) {
+    const r = await get(doc + '?$select=Date,Контрагент_Key&$filter=' + enc('Posted eq true'));
+    for (const d of r.value) {
+      const y = Number(d.Date.slice(0, 4));
+      if (y >= FIRST_YEAR && y <= year) ensure(y, d.Контрагент_Key).ships++;
+    }
+  }
+  return Object.fromEntries(Object.entries(years).map(([y, m]) => {
+    const clients = [...m].map(([k, v]) => ({ name: names.get(k) || 'Прочие операции', sum: num(v.sum), ships: v.ships }))
+      .filter(c => Math.abs(c.sum) > 0.5 || c.ships).sort((a, b) => b.sum - a.sum);
+    return [y, { total: num(clients.reduce((a, c) => a + c.sum, 0)), ships: clients.reduce((a, c) => a + c.ships, 0), clients }];
+  }));
+}
+
 // Поступления от клиентов по месяцам (безнал + касса), с НДС
 async function receiptsByMonth(year, today) {
   const sums = Array(today.getUTCMonth() + 1).fill(0);
@@ -187,11 +219,12 @@ export async function collect(now = new Date()) {
   const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
   const year = today.getUTCFullYear();
   const [acc, names] = await Promise.all([accounts(), counterparties()]);
-  const [revenue, receipts, d, ctr, kp, revPrev] = await Promise.all([
+  const [revenue, receipts, d, ctr, kp, revPrev, revYears] = await Promise.all([
     revenueByMonth(acc, year, today), receiptsByMonth(year, today), debts(acc, names, today), contracts(names), kpInWork(names),
     revenueByMonth(acc, year - 1, new Date(Date.UTC(year - 1, 11, 31))),
+    revenueByYearClient(acc, names, year, today),
   ]);
-  return { updated: new Date().toISOString(), today: iso(today), year, revenue, receipts, revenuePrev: revPrev, ...d, contracts: ctr, kp };
+  return { updated: new Date().toISOString(), today: iso(today), year, revenue, receipts, revenuePrev: revPrev, revenueYears: revYears, ...d, contracts: ctr, kp };
 }
 
 if (process.argv[1]?.endsWith('collect.mjs')) {
