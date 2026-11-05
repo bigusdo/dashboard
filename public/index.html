@@ -535,7 +535,25 @@ function taskTitle(t) {
   box.append(name, go); return box;
 }
 const fmtDate = s => new Date(s).toLocaleDateString('ru-RU', {day:'2-digit', month:'2-digit', year:'numeric'});
-const taskDates = t => [el('span','','создана '+fmtDate(t.created)), el('span', t.due ? (t.dd<0 ? 'tone-warn' : '') : '', t.due ? 'срок '+fmtDate(t.due) : 'срок не задан')];
+/* Срок — кнопка: клик открывает календарь, выбранная дата уходит в Pyrus. */
+function dueButton(t, cls, label) {
+  const wrap = el('span',''); wrap.style.cssText = 'position:relative;display:inline-block';
+  const b = el('button', cls, label); b.type = 'button'; b.title = 'Нажмите, чтобы выбрать срок'; b.style.cssText = 'cursor:pointer;font:inherit;border:0;background:none;padding:0;color:inherit;text-decoration:underline dotted';
+  const inp = el('input'); inp.type = 'date'; inp.value = t.due || ''; inp.tabIndex = -1; inp.setAttribute('aria-label','Срок задачи');
+  inp.style.cssText = 'position:absolute;left:0;bottom:0;width:100%;height:100%;opacity:0;pointer-events:none';
+  b.onclick = () => { try { inp.showPicker(); } catch { inp.focus(); inp.click(); } };
+  inp.onchange = async () => {
+    if (!inp.value) return;
+    b.disabled = true; b.textContent = 'Сохраняю…';
+    try {
+      const r = await fetch('/api/tasks/'+t.id+'/due', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({due: inp.value})});
+      const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.error || r.status);
+      await loadTasks();
+    } catch (err) { b.disabled = false; b.textContent = 'Не сохранено: ' + err.message; }
+  };
+  wrap.append(b, inp); return wrap;
+}
+const taskDates = t => [el('span','','создана '+fmtDate(t.created)), (() => { const s = el('span', t.due && t.dd<0 ? 'tone-warn' : ''); s.append(dueButton(t, '', t.due ? 'срок '+fmtDate(t.due) : 'срок не задан')); return s; })()];
 function taskSort(a, b) {
   if (taskTab==='idle') return b.idle-a.idle;
   if (a.dd!=null && b.dd!=null) return a.dd-b.dd;
@@ -561,7 +579,7 @@ function renderTasks() {
     const r = el('div','r');
     if (t.dd!=null && t.dd < 0) r.append(el('span','badge b-crit','✕ просрочено '+(-t.dd)+' дн.'));
     else if (taskTab==='idle') r.append(el('span','badge b-warn','▲ без движения '+t.idle+' дн.'));
-    else if (t.dd==null) r.append(el('span','badge b-warn','срок не задан'));
+    else if (t.dd==null) { const bd = el('span','badge b-warn'); bd.append(dueButton(t, '', 'срок не задан')); r.append(bd); }
     else r.append(el('span','badge b-mute', t.dd===0 ? 'срок сегодня' : 'через '+t.dd+' дн.'));
     li.append(r);
     const m = el('div','m');

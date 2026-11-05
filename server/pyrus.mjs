@@ -95,6 +95,9 @@ export const changeLists = (taskId, add, remove) => api(`tasks/${taskId}/comment
 // Переименование задачи (новый заголовок — полем subject в комментарии).
 export const renameTask = (taskId, subject) => api(`tasks/${taskId}/comments`, { json: { subject } });
 
+// Срок выполнения (YYYY-MM-DD), комментарием без текста.
+export const setDue = (taskId, due) => api(`tasks/${taskId}/comments`, { json: { due_date: due } });
+
 // Закрытие задачи (комментарий с действием «finished»); необратимо только в смысле уведомлений — в Pyrus задачу можно открыть заново.
 export const closeTask = (taskId, text) => api(`tasks/${taskId}/comments`, { json: { text, action: 'finished' } });
 

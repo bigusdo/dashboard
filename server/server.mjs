@@ -6,7 +6,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { collect } from './collect.mjs';
 import { fetchSnapshot, loadSnapshot } from './fetch_data.mjs';
 import { mergeKp } from './kp_merge.mjs';
-import { openTasks, postComment, closeTask, meta, createTask, changeLists, renameTask } from './pyrus.mjs';
+import { openTasks, postComment, closeTask, meta, createTask, changeLists, renameTask, setDue } from './pyrus.mjs';
 
 const PORT = Number(process.env.PORT || 3000);
 const REFRESH_MS = Number(process.env.REFRESH_MIN || 30) * 60_000;
@@ -132,6 +132,22 @@ createServer(async (req, res) => {
       if (!add.length && !remove.length) return send(res, 400, { error: 'Нечего менять' });
       await changeLists(id, add, remove);
       console.log(new Date().toLocaleTimeString('ru-RU'), 'списки задачи', id, '+', add.join(','), '−', remove.join(','));
+      await refreshTasks();
+      return send(res, 200, { ok: true });
+    } catch (e) { return send(res, 502, { error: e.message.split('\n')[0] }); }
+  }
+  const md = path.match(/^\/api\/tasks\/(\d+)\/due$/);
+  if (md && req.method === 'POST') {
+    const origin = req.headers.origin;
+    if (origin !== `http://localhost:${PORT}` && origin !== `http://127.0.0.1:${PORT}`) return send(res, 403, { error: 'Запрос не со страницы дашборда' });
+    if (!/^application\/json/.test(req.headers['content-type'] || '')) return send(res, 415, { error: 'Нужен JSON' });
+    const id = Number(md[1]);
+    if (!tasks?.some(t => t.id === id)) return send(res, 404, { error: 'Задача не найдена среди открытых' });
+    try {
+      const due = String(JSON.parse(await readBody(req)).due || '');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(due) || isNaN(new Date(due))) return send(res, 400, { error: 'Нужна дата YYYY-MM-DD' });
+      await setDue(id, due);
+      console.log(new Date().toLocaleTimeString('ru-RU'), 'срок задачи', id, due);
       await refreshTasks();
       return send(res, 200, { ok: true });
     } catch (e) { return send(res, 502, { error: e.message.split('\n')[0] }); }
