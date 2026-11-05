@@ -5,6 +5,9 @@
 const STALE_DAYS = 7;          // счёт на согласовании дольше — «завис» (в выгрузке есть только дата создания счёта)
 const ROUNDS_WARN = 4;         // раундов согласования времени доставки
 
+// затраты на материалы = материалы + доставка (одна сумма); null, если в боте нет ни того ни другого
+const addNullable = (a, b) => (a == null && b == null ? null : (a || 0) + (b || 0));
+
 export const kpDigits = v => (String(v ?? '').match(/\d+/) || [''])[0].replace(/^0+(?=\d)/, '');
 
 const normNum = v => String(v ?? '').toLowerCase().replace(/[^a-z0-9а-яё]/g, '');
@@ -91,6 +94,7 @@ export function mergeKp(kp1c, snapshot, now = new Date()) {
         status: deal?.status ?? null,
         plan_materials: deal?.plan_materials ?? null, plan_delivery: deal?.plan_delivery ?? null,
         fact_materials: deal?.fact_materials ?? null, fact_delivery: deal?.fact_delivery ?? null,
+        plan_total: addNullable(deal?.plan_materials, deal?.plan_delivery), fact_total: addNullable(deal?.fact_materials, deal?.fact_delivery),
         requests_open: rq.filter(r => r.status !== 'закрыта').length, requests_closed: rq.filter(r => r.status === 'закрыта').length,
         invoices_total: live.length, invoices_cancelled: all.length - live.length, stages, problems,
         invoices: matched.map(({ inv, doc, why, byNumberOnly }) => ({

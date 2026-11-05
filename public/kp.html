@@ -175,8 +175,8 @@ function detail(r) {
   else {
     const kv2 = el('div', 'kvl');
     const money = v => v == null ? '—' : rub(v);
-    [['План материалов', money(b.plan_materials)], ['План доставки', money(b.plan_delivery)],
-     ['Факт материалов (закрытые заявки)', money(b.fact_materials)], ['Факт доставки (закрытые заявки)', money(b.fact_delivery)],
+    [['План затрат на материалы', money(b.plan_total)], ['…в т.ч. материалы / доставка', money(b.plan_materials) + ' / ' + money(b.plan_delivery)],
+     ['Факт затрат на материалы (закрытые заявки)', money(b.fact_total)], ['…в т.ч. материалы / доставка', money(b.fact_materials) + ' / ' + money(b.fact_delivery)],
      ['Заявок: открыто / закрыто', b.requests_open + ' / ' + b.requests_closed],
      ['Счетов найдено в 1С', (b.invoices_total - b.not_in_onec) + ' из ' + b.invoices_total],
      ['…сумма счетов в 1С', rub(b.in_onec_sum)], ['…оплачено поставщикам', rub(b.in_onec_paid)], ['…принято по документам закупки', rub(b.in_onec_received)],
@@ -186,7 +186,7 @@ function detail(r) {
     Object.entries(b.stages).forEach(([k, v]) => chips.append(el('span', 'chip', stageName(k) + ': ' + v)));
     if (b.invoices_cancelled) chips.append(el('span', 'chip', 'отменено: ' + b.invoices_cancelled));
     s2.append(chips);
-    s2.append(el('div', 'sm', 'Факт в боте считается только по закрытым заявкам, по открытым он занижен.'));
+    s2.append(el('div', 'sm', 'Затраты на материалы = материалы + доставка. Факт в боте считается только по закрытым заявкам, по открытым он занижен.'));
   }
   g.append(s2);
 
@@ -247,7 +247,7 @@ function render() {
     else if (!b.found) buy.append(el('span', 'sm', 'КП нет в боте'));
     else {
       buy.append(el('div', '', 'счетов: ' + b.invoices_total + (b.not_in_onec ? ' · не в 1С: ' + b.not_in_onec : '')));
-      buy.append(el('div', 'sm', 'факт мат. (закрытые): ' + (b.fact_materials == null ? '—' : rub(b.fact_materials)) + (b.plan_materials != null ? ' из плана ' + rub(b.plan_materials) : '')));
+      buy.append(el('div', 'sm', 'затраты на материалы (закрытые заявки): ' + (b.fact_total == null ? '—' : rub(b.fact_total)) + (b.plan_total != null ? ' из плана ' + rub(b.plan_total) : '')));
       if (b.problems.length) buy.append(el('div', 'sm tone-warn', 'проблем: ' + b.problems.length));
     }
     tr.append(buy); body.append(tr);
