@@ -179,7 +179,8 @@ function detail(r) {
      ['Факт материалов (закрытые заявки)', money(b.fact_materials)], ['Факт доставки (закрытые заявки)', money(b.fact_delivery)],
      ['Заявок: открыто / закрыто', b.requests_open + ' / ' + b.requests_closed],
      ['Счетов найдено в 1С', (b.invoices_total - b.not_in_onec) + ' из ' + b.invoices_total],
-     ['…сумма в 1С / оплачено', rub(b.in_onec_sum) + ' / ' + rub(b.in_onec_paid)]].forEach(([a, c]) => kv2.append(el('span', '', a), el('span', '', c)));
+     ['…сумма счетов в 1С', rub(b.in_onec_sum)], ['…оплачено поставщикам', rub(b.in_onec_paid)], ['…принято по документам закупки', rub(b.in_onec_received)],
+     ['В 1С без счёта в боте', b.onec_unpaired ? b.onec_unpaired + ' шт. на ' + rub(b.onec_unpaired_sum) : 'нет']].forEach(([a, c]) => kv2.append(el('span', '', a), el('span', '', c)));
     s2.append(kv2);
     const chips = el('div', 'chips'); chips.style.marginTop = '8px';
     Object.entries(b.stages).forEach(([k, v]) => chips.append(el('span', 'chip', stageName(k) + ': ' + v)));
@@ -204,7 +205,7 @@ function detail(r) {
   if (b.invoices.length) {
     const w = el('div'); w.style.gridColumn = '1 / -1'; w.append(el('h4', '', 'Счета (бот) и их отражение в 1С'));
     const t = el('table', 'inv'); const h = el('tr');
-    ['Заявка', 'Счёт', 'Поставщик', '№ счёта', 'Этап', 'Доставка', 'Сумма в 1С', 'Оплачено в 1С', 'В 1С'].forEach((x, i) => h.append(el('th', i >= 6 && i <= 7 ? 'num' : '', x)));
+    ['Заявка', 'Счёт', 'Поставщик', '№ счёта', 'Этап', 'Доставка', 'Сумма счёта в 1С', 'Оплачено', 'Принято', 'В 1С'].forEach((x, i) => h.append(el('th', i >= 6 && i <= 8 ? 'num' : '', x)));
     const th = el('thead'); th.append(h); t.append(th);
     const tb = el('tbody');
     b.invoices.forEach(i => {
@@ -212,7 +213,7 @@ function detail(r) {
       const dl = i.delivered_at ? 'доставлено ' + dt(i.delivered_at) : (i.delivery_date ? 'на ' + dt(i.delivery_date) : '—');
       row.append(el('td', '', '№' + i.request_number), el('td', '', String(i.seq_number)), el('td', '', i.supplier || 'не указан'), el('td', '', i.number || '—'),
         el('td', '', stageName(i.status)), el('td', '', dl),
-        el('td', 'num', i.onec ? rub(i.onec.sum) : '—'), el('td', 'num', i.onec ? rub(i.onec.paid) : '—'));
+        el('td', 'num', i.onec ? rub(i.onec.sum) : '—'), el('td', 'num', i.onec ? rub(i.onec.paid) : '—'), el('td', 'num', i.onec ? rub(i.onec.received) : '—'));
       const c = el('td');
       if (i.onec) c.append(el('span', 'tag ok', i.onec.byNumberOnly ? 'найден по номеру' : 'найден'));
       else c.append(el('span', i.why === 'ещё не в 1С' ? 'tag warn' : 'tag', i.why));
@@ -274,7 +275,7 @@ function sources() {
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || r.status);
     D = d; sources(); stats(); render();
-    $('#foot').textContent = 'Суммы с НДС. Деньги клиента и документы закупок — из 1С; этапы счетов, заявки и план — из бота «Отдел закупок». Счёт бота ищется в 1С по входящему номеру и поставщику в той же КП. Нажмите на строку, чтобы раскрыть подробности.'
+    $('#foot').textContent = 'Суммы с НДС. Деньги клиента и документы закупок — из 1С; этапы счетов, заявки и план — из бота «Отдел закупок». Счёт бота ищется в 1С среди заказов поставщику той же КП по номеру счёта и поставщику. Нажмите на строку, чтобы раскрыть подробности.'
       + (d.botOnly?.length ? ' В боте есть открытые КП, которых нет среди КП в работе по 1С: ' + d.botOnly.map(x => x.kp_number).join(', ') + '.' : '');
   } catch (e) {
     $('#src').textContent = 'Не удалось получить данные: ' + e.message;

@@ -1,6 +1,6 @@
 // Сведение КП из 1С (деньги: заказ, акты, оплаты, документы закупок) со снимком отдела закупок (заявки, счета, этапы).
-// Материалы по открытым заявкам в рублях бот не отдаёт, поэтому счета бота сопоставляются с документами закупки 1С
-// по входящему номеру и поставщику: из бота — этап счёта, из 1С — сумма и оплата.
+// Материалы по открытым заявкам в рублях бот не отдаёт, поэтому счета бота сопоставляются с заказами поставщику 1С
+// (в них номер счёта поставщика и его сумма) по номеру счёта и поставщику; оплаты и приёмка — по объекту расчётов заказа.
 
 const STALE_DAYS = 7;          // счёт на согласовании дольше — «завис» (в выгрузке есть только дата создания счёта)
 const ROUNDS_WARN = 4;         // раундов согласования времени доставки
@@ -8,39 +8,50 @@ const ROUNDS_WARN = 4;         // раундов согласования вре
 export const kpDigits = v => (String(v ?? '').match(/\d+/) || [''])[0].replace(/^0+(?=\d)/, '');
 
 const normNum = v => String(v ?? '').toLowerCase().replace(/[^a-z0-9а-яё]/g, '');
-const digitsOnly = v => String(v ?? '').replace(/\D/g, '').replace(/^0+/, '');
-const normName = v => String(v ?? '').toLowerCase().replace(/ё/g, 'е')
-  .replace(/\b(ооо|зао|пао|оао|ао|ип|тд|торговый дом|фирма|компания)\b/g, ' ').replace(/[^a-zа-я0-9]/g, '');
+const digitsOnly = v => String(v ?? '').replace(/D/g, '').replace(/^0+/, '');
+const STOP = new Set(['ооо', 'зао', 'пао', 'оао', 'ао', 'ип', 'тд', 'стд', 'пк', 'торговый', 'дом', 'фирма', 'компания', 'группа', 'спб', 'дерево']);
+const tokens = v => String(v ?? '').toLowerCase().replace(/ё/g, 'е').split(/[^a-zа-я0-9]+/).filter(t => t.length >= 3 && !STOP.has(t));
 
 function sameNumber(a, b) {
   const x = normNum(a), y = normNum(b);
   if (!x || !y) return false;
   if (x === y) return true;
   const dx = digitsOnly(a), dy = digitsOnly(b);
-  return dx.length >= 3 && dx === dy;
+  return dx.length >= 4 && dx === dy;
 }
+// true — поставщики совпали; false — названы по-разному; null — у одного из них названия нет
 function sameSupplier(a, b) {
-  const x = normName(a), y = normName(b);
-  if (!x || !y) return null;                 // не с чем сравнивать
-  return x === y || (Math.min(x.length, y.length) >= 4 && (x.includes(y) || y.includes(x)));
+  const x = tokens(a), y = tokens(b);
+  if (!x.length || !y.length) return null;
+  return x.some(t => y.some(u => t === u || (Math.min(t.length, u.length) >= 5 && (t.includes(u) || u.includes(t)))));
 }
 
-// Счёт бота → документ закупки 1С той же КП. Каждый документ 1С используется один раз.
-function matchInvoices(invoices, docs) {
-  const used = new Set();
-  return invoices.map(inv => {
-    if (!inv.invoice_number) return { inv, doc: null, why: 'в боте нет номера счёта' };
-    let found = null, byNumberOnly = false;
-    for (let i = 0; i < docs.length; i++) {
-      if (used.has(i) || !sameNumber(inv.invoice_number, docs[i].num)) continue;
-      const s = sameSupplier(inv.supplier_name, docs[i].supplier);
-      if (s === false) continue;
-      found = i; byNumberOnly = s === null; if (s) break;
+// Счёт бота → заказ поставщику 1С (счёт) той же КП. Каждый заказ используется один раз.
+// Сначала номер + поставщик; потом длинный номер (от 5 знаков) при другом названии поставщика (ЭТМ и «Электротехмонтаж»).
+function matchInvoices(invoices, orders) {
+  const used = new Set(), out = new Map();
+  const attempt = (strict) => {
+    for (const inv of invoices) {
+      if (out.has(inv) || !inv.invoice_number) continue;
+      for (let i = 0; i < orders.length; i++) {
+        if (used.has(i) || !sameNumber(inv.invoice_number, orders[i].num)) continue;
+        const s = sameSupplier(inv.supplier_name, orders[i].supplier);
+        if (strict ? s !== true : (s === true || normNum(orders[i].num).length < 5)) continue;
+        used.add(i); out.set(inv, { doc: orders[i], byNumberOnly: !strict });
+        break;
+      }
     }
-    if (found == null) return { inv, doc: null, why: 'ещё не в 1С' };
-    used.add(found);
-    return { inv, doc: docs[found], byNumberOnly };
-  });
+  };
+  attempt(true); attempt(false);
+  const unpaired = orders.filter((_, i) => !used.has(i));
+  return {
+    unpaired,
+    list: invoices.map(inv => {
+      const m = out.get(inv);
+      if (m) return { inv, ...m };
+      return { inv, doc: null, why: inv.invoice_number ? 'ещё не в 1С' : 'в боте нет номера счёта' };
+    }),
+  };
 }
 
 const daysSince = (iso, now) => iso ? Math.floor((now - new Date(iso)) / 864e5) : null;
@@ -61,7 +72,7 @@ export function mergeKp(kp1c, snapshot, now = new Date()) {
     const rq = (reqs.get(key) || []).filter(r => r.status !== 'отменена');
     const all = (invs.get(key) || []).slice().sort((a, b) => (a.request_number - b.request_number) || (a.seq_number - b.seq_number));
     const live = all.filter(i => i.status !== 'отменена');
-    const matched = matchInvoices(live, k.docs || []);
+    const { list: matched, unpaired } = matchInvoices(live, k.orders || []);
     const matchedDocs = matched.filter(m => m.doc).map(m => m.doc);
     const stages = {};
     for (const i of live) stages[i.status] = (stages[i.status] || 0) + 1;
@@ -86,9 +97,10 @@ export function mergeKp(kp1c, snapshot, now = new Date()) {
           request_number: inv.request_number, seq_number: inv.seq_number, status: inv.status,
           supplier: inv.supplier_name, number: inv.invoice_number,
           delivery_date: inv.delivery_date, delivered_at: inv.delivered_at, accepted: inv.acceptance_decision,
-          onec: doc ? { sum: doc.sum, paid: doc.paid, date: doc.date, byNumberOnly: !!byNumberOnly } : null, why: why || null,
+          onec: doc ? { sum: doc.sum, paid: doc.paid, received: doc.received, status: doc.status, date: doc.date, byNumberOnly: !!byNumberOnly } : null, why: why || null,
         })),
-        in_onec_sum: matchedDocs.reduce((a, d) => a + d.sum, 0), in_onec_paid: matchedDocs.reduce((a, d) => a + d.paid, 0),
+        in_onec_sum: matchedDocs.reduce((a, d) => a + d.sum, 0), in_onec_paid: matchedDocs.reduce((a, d) => a + d.paid, 0), in_onec_received: matchedDocs.reduce((a, d) => a + d.received, 0),
+        onec_unpaired: unpaired.length, onec_unpaired_sum: unpaired.reduce((a, d) => a + d.sum, 0),
         not_in_onec: matched.filter(m => !m.doc).length,
       },
     };

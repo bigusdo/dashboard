@@ -114,7 +114,7 @@ async function dealCosts(names) {
   const nom = await get('Catalog_Номенклатура?$select=Ref_Key,ТипНоменклатуры');
   const isGoods = new Map(nom.value.map(n => [n.Ref_Key, n['ТипНоменклатуры'] === 'Товар']));
   const ZERO = '00000000-0000-0000-0000-000000000000';
-  const purchases = await get('Document_ПриобретениеТоваровУслуг?$select=Ref_Key,Date,Number,НомерВходящегоДокумента,СуммаДокумента,Сделка_Key,Контрагент_Key,Товары&$filter=' + enc('Posted eq true'));
+  const purchases = await get('Document_ПриобретениеТоваровУслуг?$select=Ref_Key,Сделка_Key,Контрагент_Key,Товары&$filter=' + enc('Posted eq true'));
 
   const paid = new Map();
   for (const doc of ['Document_СписаниеБезналичныхДенежныхСредств', 'Document_РасходныйКассовыйОрдер']) {
@@ -123,27 +123,34 @@ async function dealCosts(names) {
       paid.set(row.ОбъектРасчетов_Key, (paid.get(row.ОбъектРасчетов_Key) || 0) + row['Сумма']);
   }
 
-  const objTotal = new Map(), subLines = new Map(), res = new Map(), docs = [];
+  const objTotal = new Map(), recvByObj = new Map(), subLines = new Map(), res = new Map();
   const add = (m, key, v) => m.set(key, (m.get(key) || 0) + v);
   for (const doc of purchases.value) {
+    for (const l of doc['Товары'] || []) add(recvByObj, l.ОбъектРасчетов_Key, l['СуммаСНДС']); // принято по объекту расчётов (любая сделка)
     if (!doc.Сделка_Key || doc.Сделка_Key === ZERO) continue;
-    const c = res.get(doc.Сделка_Key) || { mat: 0, sub: 0, matBy: new Map(), subBy: new Map(), docs: [] };
+    const c = res.get(doc.Сделка_Key) || { mat: 0, sub: 0, matBy: new Map(), subBy: new Map(), orders: [] };
     res.set(doc.Сделка_Key, c);
     const cp = names.get(doc.Контрагент_Key) || '—';
-    const lines = [];
     for (const l of doc['Товары'] || []) {
       const v = l['СуммаСНДС'];
       add(objTotal, l.ОбъектРасчетов_Key, v);
-      lines.push({ obj: l.ОбъектРасчетов_Key, v });
       if (isGoods.get(l.Номенклатура_Key)) { c.mat += v; add(c.matBy, cp, v); }
       else add(subLines, doc.Сделка_Key + '|' + l.ОбъектРасчетов_Key + '|' + cp, v);
     }
-    docs.push({ c, lines, supplier: cp, num: doc['НомерВходящегоДокумента'] || '', date: (doc.Date || '').slice(0, 10), sum: doc['СуммаДокумента'] });
   }
-  // документы закупки по сделке: поставщик, входящий номер, сумма и оплаченная часть (пропорционально объекту расчётов)
-  for (const d of docs) {
-    const p = d.lines.reduce((a, l) => a + l.v * Math.min(paid.get(l.obj) || 0, objTotal.get(l.obj) || 1) / (objTotal.get(l.obj) || 1), 0);
-    d.c.docs.push({ supplier: d.supplier, num: d.num, date: d.date, sum: num(d.sum), paid: num(Math.min(p, d.sum)) });
+  // Заказы поставщику по сделке = счета поставщиков (номер счёта — «Номер по данным поставщика»): сумма счёта,
+  // оплачено и принято по документам закупки (по объекту расчётов; если он общий у нескольких заказов — пропорционально сумме).
+  const zp = await get('Document_ЗаказПоставщику?$select=Date,Статус,НомерПоДаннымПоставщика,СуммаДокумента,Сделка_Key,Контрагент_Key,ОбъектРасчетов_Key&$filter=' + enc('Posted eq true and DeletionMark eq false'));
+  const orderTotal = new Map();
+  for (const z of zp.value) add(orderTotal, z.ОбъектРасчетов_Key, z['СуммаДокумента']);
+  for (const z of zp.value) {
+    if (!z.Сделка_Key || z.Сделка_Key === ZERO) continue;
+    // заказ поставщику может быть без закупок (счёт есть, товар ещё не оприходован): сделку заводим здесь
+    const c = res.get(z.Сделка_Key) || res.set(z.Сделка_Key, { mat: 0, sub: 0, matBy: new Map(), subBy: new Map(), orders: [] }).get(z.Сделка_Key);
+    const share = z['СуммаДокумента'] / (orderTotal.get(z.ОбъектРасчетов_Key) || 1);
+    const part = m => Math.min((m.get(z.ОбъектРасчетов_Key) || 0) * share, z['СуммаДокумента']);
+    c.orders.push({ supplier: names.get(z.Контрагент_Key) || '—', num: z['НомерПоДаннымПоставщика'] || '', date: (z.Date || '').slice(0, 10), status: z['Статус'] || '',
+      sum: num(z['СуммаДокумента']), paid: num(part(paid)), received: num(part(recvByObj)) });
   }
   for (const [k, v] of subLines) {
     const [deal, obj, cp] = k.split('|');
@@ -218,7 +225,7 @@ async function kpInWork(names) {
       sum: num(p.sum), done: num(p.done), paid: num(Math.min(p.paid, p.sum)),
       sub: num(costs.get(d.Ref_Key)?.sub || 0), mat: num(costs.get(d.Ref_Key)?.mat || 0),
       subBy: byList(costs.get(d.Ref_Key)?.subBy), matBy: byList(costs.get(d.Ref_Key)?.matBy),
-      docs: costs.get(d.Ref_Key)?.docs || [],
+      orders: costs.get(d.Ref_Key)?.orders || [],
     });
   }
   return res.sort((a, b) => b.sum - a.sum);
