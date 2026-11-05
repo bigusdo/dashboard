@@ -577,10 +577,11 @@ function renderTasks() {
     const li = el('li','task');
     li.append(taskTitle(t));
     const r = el('div','r');
-    if (t.dd!=null && t.dd < 0) r.append(el('span','badge b-crit','✕ просрочено '+(-t.dd)+' дн.'));
+    const dueBadge = (cls, label) => { const bd = el('span','badge '+cls); bd.append(dueButton(t, '', label)); r.append(bd); };
+    if (t.dd!=null && t.dd < 0) dueBadge('b-crit', '✕ просрочено '+(-t.dd)+' дн.');
     else if (taskTab==='idle') r.append(el('span','badge b-warn','▲ без движения '+t.idle+' дн.'));
-    else if (t.dd==null) { const bd = el('span','badge b-warn'); bd.append(dueButton(t, '', 'срок не задан')); r.append(bd); }
-    else r.append(el('span','badge b-mute', t.dd===0 ? 'срок сегодня' : 'через '+t.dd+' дн.'));
+    else if (t.dd==null) dueBadge('b-warn', 'срок не задан');
+    else dueBadge('b-mute', t.dd===0 ? 'срок сегодня' : 'через '+t.dd+' дн.');
     li.append(r);
     const m = el('div','m');
     if (t.kp && KP.some(k=>k.id===t.kp)) {
