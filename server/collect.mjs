@@ -38,16 +38,22 @@ async function revenueByMonth(acc, year, today) {
 const FIRST_YEAR = 2020;
 async function revenueByYearClient(acc, names, year, today) {
   const years = {};
-  const ensure = (y, k) => ((years[y] ||= new Map()).get(k) || years[y].set(k, { sum: 0, ships: 0 }).get(k));
+  const ensure = (y, k) => ((years[y] ||= new Map()).get(k) || years[y].set(k, { sum: 0, ships: 0, months: Array(12).fill(0) }).get(k));
   for (let y = FIRST_YEAR; y <= year; y++) {
-    const end = y === year ? today : new Date(Date.UTC(y, 11, 31));
-    const t = await get(`AccountingRegister_Хозрасчетный/Turnovers(StartPeriod=${dt(new Date(Date.UTC(y, 0, 1)))},EndPeriod=${dt(end, true)})`);
-    for (const x of t.value) {
-      if (!acc[x.Account_Key]?.startsWith('90.01')) continue;
-      const corr = acc[x.BalancedAccount_Key] || '';
-      if (corr.startsWith('90.') || corr.startsWith('99')) continue;
-      const k = x.BalancedExtDimension1_Type === 'StandardODATA.Catalog_Контрагенты' ? x.BalancedExtDimension1 : '';
-      ensure(y, k).sum += x['СуммаTurnoverCr'] - x['СуммаTurnoverDr'];
+    const lastM = y === year ? today.getUTCMonth() : 11;
+    for (let m = 0; m <= lastM; m++) {
+      const start = new Date(Date.UTC(y, m, 1));
+      const end = y === year && m === lastM ? today : lastDay(y, m);
+      const t = await get(`AccountingRegister_Хозрасчетный/Turnovers(StartPeriod=${dt(start)},EndPeriod=${dt(end, true)})`);
+      for (const x of t.value) {
+        if (!acc[x.Account_Key]?.startsWith('90.01')) continue;
+        const corr = acc[x.BalancedAccount_Key] || '';
+        if (corr.startsWith('90.') || corr.startsWith('99')) continue;
+        const k = x.BalancedExtDimension1_Type === 'StandardODATA.Catalog_Контрагенты' ? x.BalancedExtDimension1 : '';
+        const v = x['СуммаTurnoverCr'] - x['СуммаTurnoverDr'];
+        const e = ensure(y, k);
+        e.sum += v; e.months[m] += v;
+      }
     }
   }
   for (const doc of ['Document_РеализацияТоваровУслуг', 'Document_АктВыполненныхРабот']) {
@@ -58,7 +64,7 @@ async function revenueByYearClient(acc, names, year, today) {
     }
   }
   return Object.fromEntries(Object.entries(years).map(([y, m]) => {
-    const clients = [...m].map(([k, v]) => ({ name: names.get(k) || 'Прочие операции', sum: num(v.sum), ships: v.ships }))
+    const clients = [...m].map(([k, v]) => ({ name: names.get(k) || 'Прочие операции', sum: num(v.sum), ships: v.ships, months: v.months.map(num) }))
       .filter(c => Math.abs(c.sum) > 0.5 || c.ships).sort((a, b) => b.sum - a.sum);
     return [y, { total: num(clients.reduce((a, c) => a + c.sum, 0)), ships: clients.reduce((a, c) => a + c.ships, 0), clients }];
   }));

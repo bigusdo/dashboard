@@ -56,6 +56,18 @@ td.dot { width: 22px; padding-right: 0; }
 td.dot i { display: block; width: 10px; height: 10px; border-radius: 50%; }
 tr.total td { font-weight: 650; border-top: 1px solid var(--line); }
 tr.other td:nth-child(2) { color: var(--text-2); }
+.mhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.mtitle { font-weight: 650; font-size: 15px; }
+svg.months { width: 100%; height: auto; display: block; }
+.months text { font: 11px system-ui, sans-serif; fill: var(--muted); }
+.months .val { fill: var(--text-2); font-size: 10px; }
+.months .grid { stroke: var(--line-soft); }
+.months rect.bar:hover { opacity: .85; }
+.mtotal { margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--line); font-weight: 650; font-size: 16px; display: flex; justify-content: space-between; }
+tbody#rows tr[data-i] { cursor: pointer; }
+tbody#rows tr[data-i]:hover td { background: var(--line-soft); }
+tbody#rows tr.sel td { background: var(--line-soft); font-weight: 650; }
+.pie path { cursor: pointer; }
 .note { margin-top: 10px; color: var(--muted); font-size: 12.5px; }
 .msg { text-align: center; color: var(--muted); padding: 30px 0; }
 @media (max-width: 600px) { td, th { padding: 6px 4px; } .nav .yr { font-size: 22px; } }
@@ -80,6 +92,12 @@ tr.other td:nth-child(2) { color: var(--text-2); }
     <div class="pie-wrap"><svg class="pie" id="pie" viewBox="0 0 300 300" role="img" aria-label="Доли контрагентов в выручке"></svg></div>
   </section>
 
+  <section class="card" id="mcard">
+    <div class="mhead"><div class="mtitle" id="mtitle"></div><button class="icon-btn" id="mreset" hidden>Все контрагенты</button></div>
+    <svg class="months" id="months" viewBox="0 0 600 240" role="img" aria-label="Выручка по месяцам"></svg>
+    <div class="mtotal" id="mtotal"></div>
+  </section>
+
   <section class="card">
     <table>
       <thead><tr><th></th><th>Контрагент</th><th class="num">Выручка, без НДС</th><th class="num">Доля</th><th class="num">Отгрузок</th></tr></thead>
@@ -94,7 +112,38 @@ const root = document.documentElement;
 const rub = v => Math.round(v).toLocaleString('ru-RU') + ' ₽';
 const pct = v => (v >= 10 ? v.toFixed(0) : v.toFixed(1)).replace('.', ',') + '%';
 const TOP = 8;
-let YEARS = {}, KEYS = [], idx = -1, TODAY = '';
+let YEARS = {}, KEYS = [], idx = -1, TODAY = '', SEL = null; // SEL — имя выбранного контрагента
+const MON = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
+const short = v => { const a = Math.abs(v); return (v < 0 ? '−' : '') + (a >= 1e6 ? (a / 1e6).toFixed(1).replace('.', ',') + ' млн' : a >= 1e3 ? Math.round(a / 1e3) + ' тыс' : Math.round(a)); };
+function pick(name) { SEL = SEL === name ? null : name; render(); if (SEL) $('#mcard').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+$('#mreset').onclick = () => { SEL = null; render(); };
+
+function drawMonths(d, y, color) {
+  const cl = SEL == null ? null : d.clients.find(c => c.name === SEL);
+  if (SEL != null && !cl) SEL = null;
+  const months = cl ? cl.months : Array.from({ length: 12 }, (_, m) => d.clients.reduce((a, c) => a + c.months[m], 0));
+  const lastM = idx === KEYS.length - 1 && TODAY ? new Date(TODAY).getUTCMonth() : 11;
+  $('#mtitle').textContent = (cl ? cl.name : 'Все контрагенты') + ' — выручка по месяцам, ' + y;
+  $('#mreset').hidden = !cl;
+  const total = cl ? cl.sum : d.total;
+  $('#mtotal').replaceChildren(cell('span', '', 'Итого за ' + y + (cl ? ' · ' + cl.name : '')), cell('span', '', rub(total)));
+  const s = $('#months'); s.replaceChildren();
+  const W = 600, H = 240, L = 8, B = 24, T = 18, pw = W - L * 2, ph = H - B - T;
+  const max = Math.max(1, ...months.slice(0, lastM + 1)), min = Math.min(0, ...months.slice(0, lastM + 1));
+  const span = max - min, zero = T + ph * max / span;
+  s.append(svg('line', { x1: L, x2: W - L, y1: zero, y2: zero, class: 'grid' }));
+  const bw = pw / 12;
+  months.forEach((v, m) => {
+    const x = L + m * bw;
+    s.append(svg('text', { x: x + bw / 2, y: H - 7, 'text-anchor': 'middle' }, MON[m]));
+    if (m > lastM) return;
+    const h = Math.abs(v) / span * ph, yy = v >= 0 ? zero - h : zero;
+    const r = svg('rect', { x: x + bw * .15, y: yy, width: bw * .7, height: Math.max(h, v ? 1 : 0), rx: 3, fill: color, class: 'bar' });
+    r.append(svg('title', {}, MON[m] + ' ' + y + ': ' + rub(v)));
+    s.append(r);
+    if (Math.abs(v) > 0.5) s.append(svg('text', { x: x + bw / 2, y: v >= 0 ? yy - 4 : yy + h + 11, 'text-anchor': 'middle', class: 'val' }, short(v)));
+  });
+}
 
 try { const s = localStorage.getItem('tkn-theme'); if (s) root.dataset.theme = s; } catch(e) {}
 $('#themeBtn').onclick = () => {
@@ -120,7 +169,7 @@ function render() {
   const pos = d.clients.filter(c => c.sum > 0.5);
   const base = pos.reduce((a, c) => a + c.sum, 0);
   const top = pos.slice(0, TOP), rest = pos.slice(TOP);
-  const slices = top.map((c, i) => ({ name: c.name, sum: c.sum, color: `var(--c${i})` }));
+  const slices = top.map((c, i) => ({ name: c.name, sum: c.sum, color: `var(--c${i})`, pick: true }));
   const restSum = rest.reduce((a, c) => a + c.sum, 0);
   if (restSum > 0) slices.push({ name: 'Остальные (' + rest.length + ')', sum: restSum, color: 'var(--gray)' });
 
@@ -136,6 +185,7 @@ function render() {
       const big = a1 - a0 > Math.PI ? 1 : 0;
       const path = svg('path', { d: `M${x0},${y0} A${R},${R} 0 ${big} 1 ${x1},${y1} L${x2},${y2} A${r},${r} 0 ${big} 0 ${x3},${y3} Z`, fill: s.color });
       path.append(svg('title', {}, `${s.name}: ${rub(s.sum)} (${pct(frac * 100)})`));
+      if (s.pick) path.onclick = () => pick(s.name);
       p.append(path);
       if (frac >= 0.04) { const [tx, ty] = pt((R + r) / 2, (a0 + a1) / 2); p.append(svg('text', { x: tx, y: ty, 'text-anchor': 'middle', 'dominant-baseline': 'central' }, pct(frac * 100))); }
       a0 = a1;
@@ -151,12 +201,17 @@ function render() {
     const dotTd = cell('td', 'dot'); const dot = document.createElement('i');
     dot.style.background = c.sum > 0.5 ? (i >= 0 ? `var(--c${i})` : 'var(--gray)') : 'transparent';
     dotTd.append(dot);
+    tr.dataset.i = i; tr.onclick = () => pick(c.name);
+    if (c.name === SEL) tr.className = 'sel';
     tr.append(dotTd, cell('td', '', c.name), cell('td', 'num', rub(c.sum)), cell('td', 'num', c.sum > 0.5 && base ? pct(c.sum / base * 100) : '—'), cell('td', 'num', String(c.ships)));
     rows.append(tr);
   });
   const tot = document.createElement('tr'); tot.className = 'total';
   tot.append(cell('td'), cell('td', '', 'Итого'), cell('td', 'num', rub(d.total)), cell('td', 'num', ''), cell('td', 'num', String(d.ships)));
   rows.append(tot);
+
+  const si = top.findIndex(t => t.name === SEL);
+  drawMonths(d, y, SEL == null ? 'var(--c0)' : si >= 0 ? `var(--c${si})` : 'var(--gray)');
 }
 
 function go(delta) { const n = idx + delta; if (n >= 0 && n < KEYS.length) { idx = n; render(); } }
