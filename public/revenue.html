@@ -64,6 +64,13 @@ svg.months { width: 100%; height: auto; display: block; }
 .months .grid { stroke: var(--line-soft); }
 .months rect.bar:hover { opacity: .85; }
 .mtotal { margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--line); font-weight: 650; font-size: 16px; display: flex; justify-content: space-between; }
+.months .hit { fill: transparent; cursor: pointer; }
+.months .hit:hover { fill: var(--line-soft); opacity: .6; }
+.months rect.bar.msel { stroke: var(--text); stroke-width: 1.5; }
+.mdetail { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.mdetail .mdh { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 6px; font-weight: 650; }
+.mdetail table { font-size: 14px; }
+.mdetail .mdclose { font-weight: 400; }
 tbody#rows tr[data-i] { cursor: pointer; }
 tbody#rows tr[data-i]:hover td { background: var(--line-soft); }
 tbody#rows tr.sel td { background: var(--line-soft); font-weight: 650; }
@@ -96,6 +103,7 @@ tbody#rows tr.sel td { background: var(--line-soft); font-weight: 650; }
     <div class="mhead"><div class="mtitle" id="mtitle"></div><button class="icon-btn" id="mreset" hidden>Все контрагенты</button></div>
     <svg class="months" id="months" viewBox="0 0 600 240" role="img" aria-label="Выручка по месяцам"></svg>
     <div class="mtotal" id="mtotal"></div>
+    <div class="mdetail" id="mdetail" hidden></div>
   </section>
 
   <section class="card">
@@ -114,6 +122,8 @@ const pct = v => (v >= 10 ? v.toFixed(0) : v.toFixed(1)).replace('.', ',') + '%'
 const TOP = 8;
 let YEARS = {}, KEYS = [], idx = -1, TODAY = '', SEL = null; // SEL — имя выбранного контрагента
 const MON = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
+const MONFULL = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+let MSEL = null; // индекс выбранного месяца (0–11) для расшифровки
 const short = v => { const a = Math.abs(v); return (v < 0 ? '−' : '') + (a >= 1e6 ? (a / 1e6).toFixed(1).replace('.', ',') + ' млн' : a >= 1e3 ? Math.round(a / 1e3) + ' тыс' : Math.round(a)); };
 function pick(name) { SEL = SEL === name ? null : name; render(); if (SEL) $('#mcard').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
 $('#mreset').onclick = () => { SEL = null; render(); };
@@ -138,11 +148,40 @@ function drawMonths(d, y, color) {
     s.append(svg('text', { x: x + bw / 2, y: H - 7, 'text-anchor': 'middle' }, MON[m]));
     if (m > lastM) return;
     const h = Math.abs(v) / span * ph, yy = v >= 0 ? zero - h : zero;
-    const r = svg('rect', { x: x + bw * .15, y: yy, width: bw * .7, height: Math.max(h, v ? 1 : 0), rx: 3, fill: color, class: 'bar' });
+    const r = svg('rect', { x: x + bw * .15, y: yy, width: bw * .7, height: Math.max(h, v ? 1 : 0), rx: 3, fill: color, class: 'bar' + (m === MSEL ? ' msel' : '') });
     r.append(svg('title', {}, MON[m] + ' ' + y + ': ' + rub(v)));
     s.append(r);
     if (Math.abs(v) > 0.5) s.append(svg('text', { x: x + bw / 2, y: v >= 0 ? yy - 4 : yy + h + 11, 'text-anchor': 'middle', class: 'val' }, short(v)));
+    const hit = svg('rect', { x, y: 0, width: bw, height: H - B + 4, class: 'hit' });
+    hit.append(svg('title', {}, MON[m] + ' ' + y + ': ' + rub(v) + ' — нажмите для расшифровки'));
+    hit.onclick = () => { MSEL = MSEL === m ? null : m; render(); if (MSEL != null) $('#mdetail').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); };
+    s.append(hit);
   });
+  drawMonthDetail(d, y, lastM);
+}
+
+function drawMonthDetail(d, y, lastM) {
+  const box = $('#mdetail');
+  if (MSEL == null || MSEL > lastM) { MSEL = null; box.hidden = true; return; }
+  const m = MSEL;
+  const list = d.clients.filter(c => Math.abs(c.months[m]) > 0.5).sort((a, b) => b.months[m] - a.months[m]);
+  const total = d.clients.reduce((a, c) => a + c.months[m], 0);
+  const base = list.reduce((a, c) => a + Math.max(0, c.months[m]), 0);
+  box.hidden = false; box.replaceChildren();
+  const close = cell('button', 'icon-btn mdclose', 'Закрыть'); close.onclick = () => { MSEL = null; render(); };
+  box.append(Object.assign(cell('div', 'mdh'), {}));
+  box.firstChild.append(cell('span', '', MONFULL[m] + ' ' + y + ' — по контрагентам'), close);
+  if (!list.length) { box.append(cell('div', 'note', 'В этом месяце выручки нет.')); return; }
+  const t = document.createElement('table'), tb = document.createElement('tbody');
+  list.forEach(c => {
+    const v = c.months[m], tr = document.createElement('tr');
+    if (c.name === SEL) tr.className = 'sel';
+    tr.append(cell('td', '', c.name), cell('td', 'num', rub(v)), cell('td', 'num', v > 0.5 && base ? pct(v / base * 100) : '—'));
+    tb.append(tr);
+  });
+  const tot = document.createElement('tr'); tot.className = 'total';
+  tot.append(cell('td', '', 'Итого за ' + MONFULL[m].toLowerCase()), cell('td', 'num', rub(total)), cell('td'));
+  tb.append(tot); t.append(tb); box.append(t);
 }
 
 try { const s = localStorage.getItem('tkn-theme'); if (s) root.dataset.theme = s; } catch(e) {}
@@ -214,7 +253,7 @@ function render() {
   drawMonths(d, y, SEL == null ? 'var(--c0)' : si >= 0 ? `var(--c${si})` : 'var(--gray)');
 }
 
-function go(delta) { const n = idx + delta; if (n >= 0 && n < KEYS.length) { idx = n; render(); } }
+function go(delta) { const n = idx + delta; if (n >= 0 && n < KEYS.length) { idx = n; MSEL = null; render(); } }
 $('#prev').onclick = () => go(-1); $('#next').onclick = () => go(1);
 document.addEventListener('keydown', e => { if (e.key === 'ArrowLeft') go(-1); else if (e.key === 'ArrowRight') go(1); });
 // свайп на телефоне
